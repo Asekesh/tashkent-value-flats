@@ -26,12 +26,12 @@ python3 -m uvicorn app.main:app --reload
 
 Веб-интерфейс и API будут доступны на `http://127.0.0.1:8000`.
 
-Импорт fixture-объявлений:
+Ручной запуск сбора:
 
 ```bash
 curl -X POST http://localhost:8000/api/admin/scrape/run \
   -H "Content-Type: application/json" \
-  -d '{"source":"all"}'
+  -d '{"source":"olx","mode":"live"}'
 ```
 
 ## Frontend
@@ -58,4 +58,6 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 ## Источники и live scraping
 
-По умолчанию сервис не ходит на внешние сайты. Адаптеры работают на fixture-HTML, чтобы MVP был воспроизводимым и не нарушал правила площадок. Перед включением live-сбора нужно проверить robots.txt/ToS, допустимую частоту запросов и наличие публичных или партнёрских фидов.
+По умолчанию локальный запуск работает на fixture-HTML. В production live-сбор включается переменными `ALLOW_LIVE_SCRAPING=true`, `ENABLE_SCRAPE_SCHEDULER=true`, `SCRAPE_INTERVAL_MINUTES=15`.
+
+В текущей версии live-сбор реализован для OLX.uz. Uybor и Realt24 остаются fixture-адаптерами до отдельного подключения.

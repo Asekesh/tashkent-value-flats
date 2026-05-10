@@ -52,6 +52,7 @@ class ListingsPage(BaseModel):
 
 class ScrapeRunRequest(BaseModel):
     source: str = "all"
+    mode: str = "auto"
 
 
 class ScrapeRunOut(BaseModel):

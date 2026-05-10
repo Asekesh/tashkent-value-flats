@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,7 @@ from app.db.session import Base, SessionLocal, engine
 from app.models import Listing  # noqa: F401
 from app.scrapers.registry import ADAPTERS, parse_fixture
 from app.services.listings import upsert_raw_listing
+from app.services.scheduler import scheduled_scrape_loop, stop_scheduler
 
 
 settings = get_settings()
@@ -24,6 +26,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
+    scheduler_task: asyncio.Task | None = None
     if settings.seed_fixtures_on_startup:
         with SessionLocal() as db:
             count = db.scalar(select(func.count()).select_from(Listing))
@@ -32,7 +35,10 @@ async def lifespan(_: FastAPI):
                     for raw in parse_fixture(source):
                         upsert_raw_listing(db, raw)
                 db.commit()
+    if settings.enable_scrape_scheduler and settings.allow_live_scraping:
+        scheduler_task = asyncio.create_task(scheduled_scrape_loop())
     yield
+    await stop_scheduler(scheduler_task)
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

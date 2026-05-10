@@ -14,7 +14,7 @@ document.querySelector("#refreshButton").addEventListener("click", () => fetchLi
 document.querySelector("#importButton").addEventListener("click", importFixtures);
 
 async function importFixtures() {
-  setBusy(true, "Импортируем объявления...");
+  setBusy(true, "Запускаем сбор объявлений...");
   await fetch("/api/admin/scrape/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -151,4 +151,3 @@ fetchListings().catch(() => {
   statusEl.textContent = "API недоступен";
   setBusy(false);
 });
-

@@ -30,3 +30,6 @@ class SourceAdapter:
 
     def parse(self, html: str) -> list[RawListing]:
         raise NotImplementedError
+
+    def fetch_live(self, max_pages: int = 1, delay_seconds: float = 2.0) -> list[RawListing]:
+        raise NotImplementedError(f"{self.source} live scraping is not implemented")
