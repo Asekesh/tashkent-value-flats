@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tashkent Value Flats</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Tashkent Value Flats</h1>
+          <p>Агрегатор квартир в Ташкенте с поиском вариантов ниже рынка</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="refreshButton" class="icon-button" title="Обновить">↻</button>
+          <button id="importButton" class="primary-button">Импорт fixtures</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="filters">
+          <div class="panel-heading">Фильтры</div>
+          <label>Район<select id="district"><option value="">Все районы</option></select></label>
+          <label>Комнаты<select id="rooms"><option value="">Любая</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5+</option></select></label>
+          <div class="range-group"><span>Площадь, м²</span><div><input id="area_min" placeholder="от" /><input id="area_max" placeholder="до" /></div></div>
+          <div class="range-group"><span>Цена, $</span><div><input id="price_min" placeholder="от" /><input id="price_max" placeholder="до" /></div></div>
+          <div class="range-group"><span>$/м²</span><div><input id="ppm_min" placeholder="от" /><input id="ppm_max" placeholder="до" /></div></div>
+          <label>Ниже рынка, %<input id="discount_min" value="15" /></label>
+          <label>Источник<select id="source"><option value="">Все</option><option value="olx">OLX</option><option value="uybor">Uybor</option><option value="realt24">Realt24</option></select></label>
+          <label>Сортировка<select id="sort"><option value="discount">Ниже рынка</option><option value="price_per_m2">Цена за м²</option><option value="fresh">Свежие</option><option value="price">Цена</option></select></label>
+          <button id="applyButton" class="primary-button full">Применить</button>
+        </aside>
+
+        <section class="results">
+          <div class="result-toolbar"><span id="status">Готово</span><span id="sortLabel">discount</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Объявление</th><th>Район</th><th>Комн.</th><th>м²</th><th>Цена</th><th>$/м²</th><th>Рынок</th><th>Дисконт</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside id="detail" class="detail empty">Выберите объявление</aside>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+

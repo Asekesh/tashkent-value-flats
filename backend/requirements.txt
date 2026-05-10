@@ -1,0 +1,10 @@
+beautifulsoup4==4.12.3
+fastapi==0.115.6
+httpx==0.28.1
+psycopg[binary]==3.2.13
+pydantic-settings==2.7.1
+pytest==8.3.4
+pytest-asyncio==0.25.0
+python-dateutil==2.9.0.post0
+SQLAlchemy==2.0.36
+uvicorn[standard]==0.34.0

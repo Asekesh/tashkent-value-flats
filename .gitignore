@@ -1,0 +1,16 @@
+.DS_Store
+
+# Python
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+
+# Local databases and env
+*.db
+.env
+
+# Node
+node_modules/
+dist/
+
