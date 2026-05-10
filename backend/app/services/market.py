@@ -18,6 +18,7 @@ class Estimate:
     confidence: str
     discount_percent: float | None
     is_below_market: bool
+    savings_usd: float | None
 
 
 def estimate_market(
@@ -31,18 +32,37 @@ def estimate_market(
     exclude_listing_id: int | None = None,
 ) -> Estimate:
     candidates, basis, confidence = _building_candidates(db, building_key, rooms, exclude_listing_id)
-    if len(candidates) < 3:
-        candidates, basis, confidence = _district_area_candidates(db, district, rooms, area_m2, exclude_listing_id)
-    if len(candidates) < 3:
-        candidates, basis, confidence = _district_room_candidates(db, district, rooms, exclude_listing_id)
 
-    market_price = median_price([item.price_per_m2_usd for item in candidates])
+    # Если есть 2+ объявления в том же ЖК — считаем простое среднее по ЖК
+    market_price = None
+    if len(candidates) >= 2:
+        prices = [item.price_per_m2_usd for item in candidates if item.price_per_m2_usd]
+        if prices:
+            market_price = round(sum(prices) / len(prices), 2)
+            basis = "building"
+            confidence = "high"
+    else:
+        # fallback на существующую логику (district +/- area, затем district by rooms)
+        if len(candidates) < 3:
+            candidates, basis, confidence = _district_area_candidates(db, district, rooms, area_m2, exclude_listing_id)
+        if len(candidates) < 3:
+            candidates, basis, confidence = _district_room_candidates(db, district, rooms, exclude_listing_id)
+
+        market_price = median_price([item.price_per_m2_usd for item in candidates])
+
     discount = None
+    savings = None
     is_below_market = False
     if market_price and listing_price_per_m2:
-        discount = round((market_price - listing_price_per_m2) / market_price * 100, 2)
-        threshold = get_settings().below_market_threshold * 100
-        is_below_market = discount >= threshold
+        if market_price != 0:
+            discount = round((1 - listing_price_per_m2 / market_price) * 100, 2)
+        else:
+            discount = None
+        if discount is not None:
+            threshold = get_settings().below_market_threshold * 100
+            is_below_market = discount >= threshold
+        if listing_price_per_m2 and area_m2 and market_price is not None:
+            savings = round((market_price - listing_price_per_m2) * area_m2, 2)
     if len(candidates) < 3:
         confidence = "low"
         basis = "insufficient_data"
@@ -54,6 +74,7 @@ def estimate_market(
         confidence=confidence,
         discount_percent=discount,
         is_below_market=is_below_market,
+        savings_usd=savings,
     )
 
 
