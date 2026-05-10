@@ -18,7 +18,7 @@ async function importFixtures() {
   await fetch("/api/admin/scrape/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source: "all" }),
+    body: JSON.stringify({ source: "olx", mode: "live" }),
   });
   await fetchListings();
 }
@@ -58,7 +58,7 @@ function renderRows() {
       : `<span class="badge ${listing.market.is_below_market ? "good" : ""}">${listing.market.discount_percent.toFixed(1)}%</span>`;
     return `
       <tr data-id="${listing.id}" class="${state.selectedId === listing.id ? "selected" : ""}">
-        <td><strong>${escapeHtml(listing.title)}</strong><span>${listing.source.toUpperCase()} · дублей ${listing.duplicate_count}</span></td>
+        <td><strong>${escapeHtml(listing.title)}</strong><span>${listing.source.toUpperCase()} · дублей ${listing.duplicate_count}</span><a class="open-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer" onclick="event.stopPropagation()">Открыть</a></td>
         <td>${escapeHtml(listing.district)}</td>
         <td>${listing.rooms}</td>
         <td>${listing.area_m2}</td>

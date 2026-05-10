@@ -14,6 +14,11 @@ def resolve_sources(source: str) -> list[str]:
     return list(ADAPTERS.keys()) if source == "all" else [source]
 
 
+def resolve_live_sources(source: str) -> list[str]:
+    sources = resolve_sources(source)
+    return [source_name for source_name in sources if get_adapter(source_name).supports_live]
+
+
 def run_scrape_for_source(db: Session, source: str, mode: str = "auto") -> ScrapeRun:
     settings = get_settings()
     run = ScrapeRun(source=source, status="running")
@@ -52,5 +57,7 @@ def run_scrape_for_source(db: Session, source: str, mode: str = "auto") -> Scrap
 
 
 def run_scrape(db: Session, source: str = "all", mode: str = "auto") -> list[ScrapeRun]:
-    return [run_scrape_for_source(db, source_name, mode=mode) for source_name in resolve_sources(source)]
-
+    settings = get_settings()
+    use_live = mode == "live" or (mode == "auto" and settings.allow_live_scraping)
+    sources = resolve_live_sources(source) if use_live else resolve_sources(source)
+    return [run_scrape_for_source(db, source_name, mode=mode) for source_name in sources]

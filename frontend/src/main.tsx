@@ -61,9 +61,9 @@ const defaultFilters: Filters = {
   price_max: "",
   ppm_min: "",
   ppm_max: "",
-  discount_min: "15",
+  discount_min: "",
   source: "",
-  sort: "discount",
+  sort: "fresh",
 };
 
 function App() {

@@ -73,6 +73,7 @@ tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr.selected { background: #edf7f3; }
 td strong { display: block; line-height: 1.25; }
 td span { color: #687870; display: block; font-size: 13px; margin-top: 4px; }
+.open-link { color: #147c63; display: inline-flex; font-size: 13px; font-weight: 700; margin-top: 6px; text-decoration: none; }
 .badge { background: #eef0e6; border-radius: 999px; color: #536020; display: inline-flex; font-weight: 700; line-height: 1; padding: 6px 8px; }
 .badge.good { background: #dcefe8; color: #12664f; }
 .badge.muted { background: #eceeed; color: #6b7670; }
@@ -100,4 +101,3 @@ dd { margin: 0; }
   .filters, .detail { border-width: 0 0 1px; }
   .table-wrap { height: auto; max-height: 60vh; }
 }
-

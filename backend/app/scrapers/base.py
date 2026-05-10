@@ -27,6 +27,7 @@ class RawListing:
 class SourceAdapter:
     source: str
     fixture_name: str
+    supports_live: bool = False
 
     def parse(self, html: str) -> list[RawListing]:
         raise NotImplementedError

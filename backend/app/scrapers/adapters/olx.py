@@ -16,6 +16,7 @@ from app.services.normalization import compact_text, normalize_district
 class OlxAdapter(SourceAdapter):
     source = "olx"
     fixture_name = "olx.html"
+    supports_live = True
     search_url = "https://www.olx.uz/nedvizhimost/kvartiry/prodazha/tashkent/"
 
     def parse(self, html: str) -> list[RawListing]:

@@ -27,14 +27,14 @@
           <div class="range-group"><span>Площадь, м²</span><div><input id="area_min" placeholder="от" /><input id="area_max" placeholder="до" /></div></div>
           <div class="range-group"><span>Цена, $</span><div><input id="price_min" placeholder="от" /><input id="price_max" placeholder="до" /></div></div>
           <div class="range-group"><span>$/м²</span><div><input id="ppm_min" placeholder="от" /><input id="ppm_max" placeholder="до" /></div></div>
-          <label>Ниже рынка, %<input id="discount_min" value="15" /></label>
+          <label>Ниже рынка, %<input id="discount_min" placeholder="15" /></label>
           <label>Источник<select id="source"><option value="">Все</option><option value="olx">OLX</option><option value="uybor">Uybor</option><option value="realt24">Realt24</option></select></label>
-          <label>Сортировка<select id="sort"><option value="discount">Ниже рынка</option><option value="price_per_m2">Цена за м²</option><option value="fresh">Свежие</option><option value="price">Цена</option></select></label>
+          <label>Сортировка<select id="sort"><option value="fresh">Свежие</option><option value="discount">Ниже рынка</option><option value="price_per_m2">Цена за м²</option><option value="price">Цена</option></select></label>
           <button id="applyButton" class="primary-button full">Применить</button>
         </aside>
 
         <section class="results">
-          <div class="result-toolbar"><span id="status">Готово</span><span id="sortLabel">discount</span></div>
+          <div class="result-toolbar"><span id="status">Готово</span><span id="sortLabel">fresh</span></div>
           <div class="table-wrap">
             <table>
               <thead>

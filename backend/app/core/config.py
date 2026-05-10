@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     allow_live_scraping: bool = False
     seed_fixtures_on_startup: bool = False
+    purge_fixture_listings_on_startup: bool = False
     enable_scrape_scheduler: bool = False
     scrape_interval_minutes: int = 15
     scheduled_scrape_sources: str = "olx"

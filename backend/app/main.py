@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select, func
+from sqlalchemy import delete, select, func
 
 from app.api import admin, listings
 from app.core.config import get_settings
@@ -27,6 +27,14 @@ STATIC_DIR = Path(__file__).parent / "static"
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     scheduler_task: asyncio.Task | None = None
+    if settings.purge_fixture_listings_on_startup:
+        with SessionLocal() as db:
+            db.execute(
+                delete(Listing).where(
+                    Listing.source_id.in_(["olx-1", "olx-2", "olx-3", "uybor-1", "uybor-2", "uybor-3", "realt24-1", "realt24-2", "realt24-3"])
+                )
+            )
+            db.commit()
     if settings.seed_fixtures_on_startup:
         with SessionLocal() as db:
             count = db.scalar(select(func.count()).select_from(Listing))
