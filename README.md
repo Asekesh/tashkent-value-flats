@@ -2,6 +2,8 @@
 
 MVP веб-сервиса для агрегирования объявлений о продаже квартир в Ташкенте и поиска вариантов минимум на 15% ниже рынка.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Asekesh/tashkent-value-flats)
+
 ## Что внутри
 
 - FastAPI backend с SQLAlchemy, Alembic-ready структурой и SQLite по умолчанию.
