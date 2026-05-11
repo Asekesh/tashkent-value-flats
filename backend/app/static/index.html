@@ -4,52 +4,190 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tashkent Value Flats</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260510-2" />
+    <link rel="icon" href="/static/favicon.png" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260511-hero" />
   </head>
   <body>
     <main class="app-shell">
-      <header class="topbar">
-        <div>
-          <h1>Tashkent Value Flats</h1>
-          <p>Агрегатор квартир в Ташкенте с поиском вариантов ниже рынка</p>
-        </div>
-        <div class="topbar-actions">
-          <button id="refreshButton" class="icon-button" title="Обновить">↻</button>
-          <button id="importButton" class="primary-button">Запустить сбор</button>
-        </div>
-      </header>
-
-      <section class="workspace">
-        <aside class="filters">
-          <div class="panel-heading">Фильтры</div>
-          <label>Район<select id="district"><option value="">Все районы</option></select></label>
-          <label>Комнаты<select id="rooms"><option value="">Любая</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5+</option></select></label>
-          <div class="range-group"><span>Площадь, м²</span><div><input id="area_min" placeholder="от" /><input id="area_max" placeholder="до" /></div></div>
-          <div class="range-group"><span>Цена, $</span><div><input id="price_min" placeholder="от" /><input id="price_max" placeholder="до" /></div></div>
-          <div class="range-group"><span>$/м²</span><div><input id="ppm_min" placeholder="от" /><input id="ppm_max" placeholder="до" /></div></div>
-          <label>Ниже рынка, %<input id="discount_min" placeholder="15" /></label>
-          <label>Источник<select id="source"><option value="">Все</option><option value="olx">OLX</option><option value="uybor">Uybor</option><option value="realt24">Realt24</option></select></label>
-          <label>Сортировка<select id="sort"><option value="fresh">Свежие</option><option value="discount">Ниже рынка</option><option value="price_per_m2">Цена за м²</option><option value="price">Цена</option></select></label>
-          <button id="applyButton" class="primary-button full">Применить</button>
-        </aside>
-
-        <section class="results">
-          <div class="result-toolbar"><span id="status">Готово</span><span id="sortLabel">fresh</span></div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Объявление</th><th>Район</th><th>Комн.</th><th>м²</th><th>Цена</th><th>$/м²</th><th>Рынок</th><th>Дисконт</th>
-                </tr>
-              </thead>
-              <tbody id="rows"></tbody>
-            </table>
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">↓</div>
+          <div>
+            <strong>Аналитик недвижимости</strong>
+            <span>Ташкент</span>
           </div>
+        </div>
+        <nav class="nav-list" aria-label="Основная навигация">
+          <p>Навигация</p>
+          <button class="nav-item active" data-view-button="dashboard" type="button"><span>⌂</span><span><strong>Главная</strong><small>лучшие сделки</small></span></button>
+          <button class="nav-item" data-view-button="listings" type="button"><span>▦</span><span><strong>Объявления</strong><small>поиск и фильтры</small></span></button>
+          <button class="nav-item" data-view-button="admin" type="button"><span>⚙</span><span><strong>Управление</strong><small>сбор данных</small></span></button>
+        </nav>
+        <div class="sidebar-foot">
+          <span>▧</span>
+          <span>Открытые площадки, рыночная оценка и поиск дисконта.</span>
+        </div>
+      </aside>
+
+      <div class="main-shell">
+        <header class="topbar">
+          <div>
+            <span class="eyebrow">Tashkent Value Flats</span>
+            <h1>Рабочая панель цен ниже рынка</h1>
+          </div>
+          <div class="topbar-actions">
+            <span id="status" class="status">Готово</span>
+            <button id="refreshButton" class="icon-button" title="Обновить список" type="button">↻</button>
+            <button id="importButton" class="primary-button" type="button">▣ Быстрый сбор</button>
+          </div>
+        </header>
+
+        <div id="scrapeProgress" class="task-card task-card-active" hidden>
+          <div class="task-card-main">
+            <div class="task-card-title">
+              <strong id="scrapeProgressTitle">Задача</strong>
+              <span class="task-status running"><span class="task-spinner"></span>Выполняется</span>
+            </div>
+            <div class="task-card-meta"><span>◷</span><span id="scrapeProgressMeta">Начало: —</span></div>
+          </div>
+          <div class="task-card-stats">
+            <div><b id="scrapeProgressPages">0</b><span>страниц</span></div>
+            <div><b id="scrapeProgressFound">0</b><span>найдено</span></div>
+            <div><b class="accent" id="scrapeProgressNew">0</b><span>новых</span></div>
+          </div>
+        </div>
+
+        <section id="dashboardView" class="view active page">
+          <div class="page-heading">
+            <div>
+              <h2>Лучшие по цене за м²</h2>
+              <p>Квартиры со скидкой 15–99% от средней цены ЖК · самая низкая цена за м² в каждом ЖК</p>
+            </div>
+            <button class="ghost-button" data-open-listings type="button">Все объявления →</button>
+          </div>
+
+          <section class="stats-grid stats-grid-3">
+            <button class="metric-card metric-card-button" data-stat-filter="all" type="button">
+              <div><span>Всего квартир</span><strong id="statTotal">0</strong></div>
+              <div class="metric-icon blue">▦</div>
+            </button>
+            <button class="metric-card metric-card-button" data-stat-filter="hot" type="button">
+              <div><span>Горячих скидок</span><strong id="statHot">0</strong></div>
+              <div class="metric-icon red">↓</div>
+            </button>
+            <button class="metric-card metric-card-button" data-stat-filter="new-today" type="button">
+              <div><span>Новых сегодня <small>(скидка 15%+)</small></span><strong id="statNew">0</strong></div>
+              <div class="metric-icon green">✦</div>
+            </button>
+          </section>
+
+          <section class="quick-filters">
+            <span>Площадка</span>
+            <button class="source-pill active" data-source-pill="" type="button">Все источники</button>
+            <button class="source-pill" data-source-pill="olx" type="button">OLX <small data-source-count="olx">0</small></button>
+            <button class="source-pill" data-source-pill="uybor" type="button">Uybor <small data-source-count="uybor">0</small></button>
+            <button class="source-pill" data-source-pill="realt24" type="button">Realt24 <small data-source-count="realt24">0</small></button>
+          </section>
+
+          <section class="quick-filters">
+            <span>Быстрый срез</span>
+            <button data-quick-rooms="1" type="button">1-комн.</button>
+            <button data-quick-rooms="2" type="button">2-комн.</button>
+            <button data-quick-rooms="3" type="button">3-комн.</button>
+            <button data-quick-rooms="4" type="button">4-комн.</button>
+            <button data-quick-discount type="button">скидка 15%+</button>
+            <button data-quick-ppm type="button">минимум $/м²</button>
+          </section>
+
+          <section class="content-grid">
+            <div class="deal-list">
+              <div class="section-title">✦ <span>Самые интересные варианты</span></div>
+              <div id="dashboardList" class="deal-list"></div>
+            </div>
+            <aside id="insightPanel" class="insight-panel"></aside>
+          </section>
         </section>
 
-        <aside id="detail" class="detail empty">Выберите объявление</aside>
-      </section>
+        <section id="listingsView" class="view page">
+          <div class="page-heading">
+            <div>
+              <h2>Объявления</h2>
+              <p><span id="listingsTotal">0</span> объектов в базе. Фильтры применяются к текущему FastAPI API.</p>
+            </div>
+          </div>
+
+          <section class="filter-panel">
+            <div class="section-title">☰ <span>Фильтры и сортировка</span></div>
+            <div class="filter-grid">
+              <label>Район<select id="district"><option value="">Все районы</option></select></label>
+              <label>Комнаты<select id="rooms"><option value="">Любая</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5+</option></select></label>
+              <label>Источник<select id="source"><option value="">Все</option><option value="olx">OLX</option><option value="uybor">Uybor</option><option value="realt24">Realt24</option></select></label>
+              <label>Сортировка<select id="sort"><option value="discount">По скидке</option><option value="price_per_m2">По цене за м²</option><option value="fresh">По дате</option><option value="price">По цене</option></select></label>
+              <div class="range-field"><span>Цена, $</span><div><input id="price_min" placeholder="от" /><input id="price_max" placeholder="до" /></div></div>
+              <div class="range-field"><span>Площадь, м²</span><div><input id="area_min" placeholder="от" /><input id="area_max" placeholder="до" /></div></div>
+              <div class="range-field"><span>$/м²</span><div><input id="ppm_min" placeholder="от" /><input id="ppm_max" placeholder="до" /></div></div>
+              <label>Скидка от, %<input id="discount_min" placeholder="15" /></label>
+            </div>
+            <div class="filter-actions">
+              <button id="applyButton" class="primary-button" type="button">⌕ Применить</button>
+              <button id="resetButton" class="ghost-button" type="button">× Сбросить</button>
+            </div>
+          </section>
+
+          <section id="listingsList" class="deal-list"></section>
+        </section>
+
+        <section id="adminView" class="view page">
+          <div class="page-heading">
+            <div>
+              <h2>Управление сбором</h2>
+              <p>Запуск live-сбора и последние состояния парсеров.</p>
+            </div>
+            <div class="page-actions">
+              <button id="refreshRunsButton" class="ghost-button" type="button">↻ Обновить</button>
+              <button id="adminImportButton" class="primary-button" type="button">▷ Запустить сейчас</button>
+            </div>
+          </div>
+          <section class="admin-grid">
+            <article class="admin-card admin-card-wide">
+              <div class="section-title">▷ <span>Управление парсингом</span></div>
+              <div class="scan-actions">
+                <button id="quickScanButton" class="primary-button scan-button" type="button">▷ Запустить сейчас</button>
+                <button id="fullScanButton" class="ghost-button scan-button" type="button">▷ Полное сканирование</button>
+              </div>
+              <p class="scan-note"><strong>Запустить сейчас</strong> — быстрый режим, стоп после 100 известных подряд. <strong>Полное сканирование</strong> — проходит все страницы выбранных площадок.</p>
+              <div class="source-picker" id="sourcePicker" aria-label="Площадки для сканирования">
+                <label><input type="checkbox" value="olx" checked /> OLX</label>
+                <label><input type="checkbox" value="uybor" checked /> Uybor</label>
+                <label><input type="checkbox" value="realt24" checked /> Realt24</label>
+              </div>
+              <div class="auto-row">
+                <span>Авто-парсинг</span>
+                <strong>Включен: каждые 15 минут, быстрый режим</strong>
+              </div>
+            </article>
+            <article class="admin-card">
+              <div class="section-title">☰ <span>Страницы площадок</span></div>
+              <button id="refreshSourcePagesButton" class="ghost-button" type="button">↻ Посчитать страницы</button>
+              <div id="sourceStats" class="source-stats"></div>
+            </article>
+            <article class="admin-card">
+              <div class="section-title">▤ <span>Пайплайн</span></div>
+              <ol class="pipeline">
+                <li>Сбор объявлений из источника</li>
+                <li>Нормализация цены, площади и адреса</li>
+                <li>Дедупликация по дому и source URLs</li>
+                <li>Расчёт цены за м² и дисконта к рынку</li>
+              </ol>
+            </article>
+            <article class="admin-card admin-card-wide">
+              <div class="section-title">↗ <span>История парсинга</span></div>
+              <div id="taskList" class="task-list"></div>
+            </article>
+          </section>
+        </section>
+      </div>
     </main>
-    <script src="/static/app.js?v=20260510-2"></script>
+    <script src="/static/app.js?v=20260511-hero"></script>
   </body>
 </html>

@@ -81,8 +81,11 @@ def estimate_market(
 def _building_candidates(db: Session, building_key: str | None, rooms: int, exclude_id: int | None) -> tuple[list[Listing], str, str]:
     if not building_key:
         return [], "building", "low"
+    settings = get_settings()
     stmt = select(Listing).where(
         Listing.status == "active",
+        Listing.price_usd >= settings.min_listing_price_usd,
+        Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
         Listing.building_key == building_key,
         Listing.rooms == rooms,
     )
@@ -92,10 +95,13 @@ def _building_candidates(db: Session, building_key: str | None, rooms: int, excl
 
 
 def _district_area_candidates(db: Session, district: str, rooms: int, area_m2: float, exclude_id: int | None) -> tuple[list[Listing], str, str]:
+    settings = get_settings()
     min_area = area_m2 * 0.85
     max_area = area_m2 * 1.15
     stmt = select(Listing).where(
         Listing.status == "active",
+        Listing.price_usd >= settings.min_listing_price_usd,
+        Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
         Listing.district == district,
         Listing.rooms == rooms,
         Listing.area_m2 >= min_area,
@@ -107,8 +113,11 @@ def _district_area_candidates(db: Session, district: str, rooms: int, area_m2: f
 
 
 def _district_room_candidates(db: Session, district: str, rooms: int, exclude_id: int | None) -> tuple[list[Listing], str, str]:
+    settings = get_settings()
     stmt = select(Listing).where(
         Listing.status == "active",
+        Listing.price_usd >= settings.min_listing_price_usd,
+        Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
         Listing.district == district,
         Listing.rooms == rooms,
     )

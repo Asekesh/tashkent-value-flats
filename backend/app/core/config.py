@@ -14,9 +14,13 @@ class Settings(BaseSettings):
     purge_fixture_listings_on_startup: bool = False
     enable_scrape_scheduler: bool = False
     scrape_interval_minutes: int = 15
-    scheduled_scrape_sources: str = "olx"
+    scheduled_scrape_sources: str = "olx,uybor,realt24"
+    scheduled_scrape_mode: str = "quick"
     live_scrape_max_pages: int = 1
     live_scrape_delay_seconds: float = 2.0
+    quick_known_stop_threshold: int = 100
+    min_listing_price_usd: float = 5000.0
+    min_listing_price_per_m2_usd: float = 100.0
     below_market_threshold: float = 0.15
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

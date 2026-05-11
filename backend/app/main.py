@@ -16,6 +16,7 @@ from app.db.session import Base, SessionLocal, engine
 from app.models import Listing  # noqa: F401
 from app.scrapers.registry import ADAPTERS, parse_fixture
 from app.services.listings import upsert_raw_listing
+from app.services.normalization import normalize_district
 from app.services.scheduler import scheduled_scrape_loop, stop_scheduler
 
 
@@ -34,6 +35,18 @@ async def lifespan(_: FastAPI):
                     Listing.source_id.in_(["olx-1", "olx-2", "olx-3", "uybor-1", "uybor-2", "uybor-3", "realt24-1", "realt24-2", "realt24-3"])
                 )
             )
+            db.commit()
+    with SessionLocal() as db:
+        unique_districts = db.scalars(select(Listing.district).distinct()).all()
+        changed = 0
+        for raw in unique_districts:
+            normalized = normalize_district(raw)
+            if normalized != raw:
+                db.execute(
+                    Listing.__table__.update().where(Listing.district == raw).values(district=normalized)
+                )
+                changed += 1
+        if changed:
             db.commit()
     if settings.seed_fixtures_on_startup:
         with SessionLocal() as db:

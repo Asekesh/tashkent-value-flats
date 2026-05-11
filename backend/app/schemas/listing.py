@@ -66,3 +66,29 @@ class ScrapeRunOut(BaseModel):
     finished_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ScrapeSourceOut(BaseModel):
+    source: str
+    supports_live: bool
+    total_pages: Optional[int] = None
+    page_size: Optional[int] = None
+    total_listings: Optional[int] = None
+    error: Optional[str] = None
+
+
+class ScrapeTaskOut(BaseModel):
+    id: int
+    status: str
+    mode: str
+    sources: str
+    current_source: Optional[str]
+    pages_scanned: int
+    found_count: int
+    new_count: int
+    updated_count: int
+    error: Optional[str]
+    started_at: datetime
+    finished_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)

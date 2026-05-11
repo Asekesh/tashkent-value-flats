@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+
 from bs4 import BeautifulSoup
 
 from app.scrapers.base import RawListing
@@ -10,6 +13,11 @@ from app.services.normalization import (
     parse_floor,
     parse_number,
 )
+
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; TashkentValueFlats/0.1; +https://github.com/Asekesh/tashkent-value-flats)",
+    "Accept-Language": "ru,en;q=0.8",
+}
 
 
 def parse_fixture_cards(html: str, source: str) -> list[RawListing]:
@@ -53,3 +61,39 @@ def text_for(card, selector: str) -> str:
     if selector == "a" and element.get("href"):
         return element.get("href")
     return compact_text(element.get_text(" "))
+
+
+def localized_text(value: Any, locale: str = "ru") -> str:
+    if isinstance(value, dict):
+        return compact_text(value.get(locale) or value.get("ru") or value.get("uz") or value.get("en") or "")
+    return compact_text(str(value or ""))
+
+
+def parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def to_int(value: Any) -> int | None:
+    number = parse_number(value)
+    return int(number) if number is not None else None
+
+
+def to_float(value: Any) -> float | None:
+    number = parse_number(value)
+    return float(number) if number is not None else None
+
+
+def unique_by_source_id(listings: list[RawListing]) -> list[RawListing]:
+    seen: set[str] = set()
+    unique: list[RawListing] = []
+    for listing in listings:
+        if listing.source_id in seen:
+            continue
+        seen.add(listing.source_id)
+        unique.append(listing)
+    return unique

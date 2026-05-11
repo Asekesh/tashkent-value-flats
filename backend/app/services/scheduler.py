@@ -12,8 +12,8 @@ async def scheduled_scrape_loop() -> None:
     settings = get_settings()
     interval_seconds = max(1, settings.scrape_interval_minutes) * 60
     while True:
-        await asyncio.sleep(interval_seconds)
         await asyncio.to_thread(_run_once)
+        await asyncio.sleep(interval_seconds)
 
 
 def _run_once() -> None:
@@ -22,7 +22,7 @@ def _run_once() -> None:
         return
     with SessionLocal() as db:
         for source in settings.scheduled_source_list:
-            run_scrape(db, source=source, mode="live")
+            run_scrape(db, source=source, mode=settings.scheduled_scrape_mode)
 
 
 async def stop_scheduler(task: asyncio.Task | None) -> None:

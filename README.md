@@ -31,7 +31,7 @@ python3 -m uvicorn app.main:app --reload
 ```bash
 curl -X POST http://localhost:8000/api/admin/scrape/run \
   -H "Content-Type: application/json" \
-  -d '{"source":"olx","mode":"live"}'
+  -d '{"source":"all","mode":"live"}'
 ```
 
 ## Frontend
@@ -60,4 +60,10 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 По умолчанию локальный запуск работает на fixture-HTML. В production live-сбор включается переменными `ALLOW_LIVE_SCRAPING=true`, `ENABLE_SCRAPE_SCHEDULER=true`, `SCRAPE_INTERVAL_MINUTES=15`.
 
-В текущей версии live-сбор реализован для OLX.uz. Uybor и Realt24 остаются fixture-адаптерами до отдельного подключения.
+Live-сбор реализован для OLX.uz, Uybor.uz и Realt24.uz. Для планового запуска всех источников используйте `SCHEDULED_SCRAPE_SOURCES=olx,uybor,realt24`.
+
+Режимы live-сбора:
+
+- `quick` — быстрый режим для авто-парсинга, идет по страницам до 100 подряд уже известных объявлений.
+- `full` — полное сканирование, проходит все страницы выбранных площадок.
+- `live`/`auto` — ограниченный режим, использует `LIVE_SCRAPE_MAX_PAGES`.
