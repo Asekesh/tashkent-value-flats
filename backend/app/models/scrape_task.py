@@ -14,6 +14,7 @@ class ScrapeTask(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="running", index=True)
+    trigger: Mapped[str] = mapped_column(String(10), default="manual", server_default="manual", index=True)
     mode: Mapped[str] = mapped_column(String(20), default="quick")
     sources: Mapped[str] = mapped_column(String(200), default="")
     current_source: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)

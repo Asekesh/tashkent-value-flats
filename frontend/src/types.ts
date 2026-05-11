@@ -58,6 +58,7 @@ export type ScrapeRun = {
   id: number;
   source: string;
   status: string;
+  trigger: string;
   new_count: number;
   updated_count: number;
   error: string | null;

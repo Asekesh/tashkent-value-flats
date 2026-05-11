@@ -212,16 +212,19 @@ function renderTaskList() {
 function taskCard(task) {
   const isRunning = task.status === "running";
   const statusClass = isRunning ? "running" : task.status === "success" ? "success" : "failed";
-  const statusLabel = isRunning ? "Выполняется" : task.status === "success" ? "Готово" : "Ошибка";
+  const statusLabel = isRunning ? "Выполняется" : task.status === "success" ? "Готово" : task.status === "stopped" ? "Остановлено" : "Ошибка";
   const spinner = isRunning ? `<span class="task-spinner"></span>` : "";
   const meta = task.finished_at && !isRunning
     ? `Готово: ${formatDateTime(task.finished_at)}`
     : `Начало: ${formatDateTime(task.started_at)}`;
+  const trigger = task.trigger === "auto" ? "auto" : "manual";
+  const triggerLabel = trigger === "auto" ? "АВТО" : "Вручную";
   return `
     <div class="task-card${isRunning ? " task-card-active" : ""}">
       <div class="task-card-main">
         <div class="task-card-title">
           <strong>Задача #${task.id}</strong>
+          <span class="task-trigger ${trigger}">${triggerLabel}</span>
           <span class="task-status ${statusClass}">${spinner}${escapeHtml(statusLabel)}</span>
         </div>
         <div class="task-card-meta"><span>◷</span><span>${escapeHtml(meta)}</span></div>

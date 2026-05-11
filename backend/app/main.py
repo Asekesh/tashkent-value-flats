@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import delete, select, func
+from sqlalchemy import delete, inspect, select, func, text
 
 from app.api import admin, listings
 from app.core.config import get_settings
@@ -24,9 +24,22 @@ settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _ensure_trigger_columns() -> None:
+    inspector = inspect(engine)
+    for table in ("scrape_runs", "scrape_tasks"):
+        if not inspector.has_table(table):
+            continue
+        columns = {col["name"] for col in inspector.get_columns(table)}
+        if "trigger" in columns:
+            continue
+        with engine.begin() as conn:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN trigger VARCHAR(10) DEFAULT 'manual'"))
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _ensure_trigger_columns()
     scheduler_task: asyncio.Task | None = None
     if settings.purge_fixture_listings_on_startup:
         with SessionLocal() as db:

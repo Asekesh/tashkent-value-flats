@@ -129,6 +129,39 @@ export function AdminPage({
 
         <article className="admin-card">
           <div className="section-title">
+            <Activity size={17} />
+            <span>Автопарсинг</span>
+          </div>
+          {(() => {
+            const autoRuns = runs.filter((r) => r.trigger === "auto");
+            const last = autoRuns[0];
+            const last24h = autoRuns.filter((r) => Date.now() - new Date(r.started_at).getTime() < 24 * 3600 * 1000);
+            const found24h = last24h.reduce((sum, r) => sum + r.new_count, 0);
+            return last ? (
+              <div className="auto-summary">
+                <div className="auto-row">
+                  <span>Последний запуск</span>
+                  <strong>{formatDate(last.started_at)}</strong>
+                </div>
+                <div className="auto-row">
+                  <span>Статус</span>
+                  <strong>{last.status === "success" ? "успех" : last.status}</strong>
+                </div>
+                <div className="auto-row">
+                  <span>За 24 часа</span>
+                  <strong>
+                    {last24h.length} запуск(ов), +{found24h} новых
+                  </strong>
+                </div>
+              </div>
+            ) : (
+              <p className="muted-text">Автозапусков ещё не было.</p>
+            );
+          })()}
+        </article>
+
+        <article className="admin-card">
+          <div className="section-title">
             <ExternalLink size={17} />
             <span>Последние запуски</span>
           </div>
@@ -141,6 +174,9 @@ export function AdminPage({
                     <span>{formatDate(run.started_at)}</span>
                   </div>
                   <div>
+                    <span className={`chip ${run.trigger === "auto" ? "auto" : "manual"}`}>
+                      {run.trigger === "auto" ? "АВТО" : "Вручную"}
+                    </span>
                     <span className={run.status === "success" ? "chip success" : "chip"}>{run.status}</span>
                     <small>
                       +{run.new_count} / обновлено {run.updated_count}

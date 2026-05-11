@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 @router.post("/scrape/run")
 def run_scrape(payload: ScrapeRunRequest) -> dict:
-    started = start_scrape_in_background(source=payload.source, mode=payload.mode)
+    started = start_scrape_in_background(source=payload.source, mode=payload.mode, trigger="manual")
     if not started:
         state = scrape_progress.get_state()
         if state["is_running"]:

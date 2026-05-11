@@ -15,6 +15,7 @@ class ScrapeRun(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     source: Mapped[str] = mapped_column(String(40), index=True)
     status: Mapped[str] = mapped_column(String(30), default="running", index=True)
+    trigger: Mapped[str] = mapped_column(String(10), default="manual", server_default="manual", index=True)
     new_count: Mapped[int] = mapped_column(Integer, default=0)
     updated_count: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -59,6 +59,7 @@ class ScrapeRunOut(BaseModel):
     id: int
     source: str
     status: str
+    trigger: str = "manual"
     new_count: int
     updated_count: int
     error: Optional[str]
@@ -80,6 +81,7 @@ class ScrapeSourceOut(BaseModel):
 class ScrapeTaskOut(BaseModel):
     id: int
     status: str
+    trigger: str = "manual"
     mode: str
     sources: str
     current_source: Optional[str]

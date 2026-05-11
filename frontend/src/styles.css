@@ -548,6 +548,22 @@ button:disabled {
   color: #15803d;
 }
 
+.chip.auto {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.chip.manual {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.auto-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .listing-body h3 {
   font-size: 15px;
   line-height: 1.32;

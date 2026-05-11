@@ -27,10 +27,10 @@ def resolve_live_sources(source: str) -> list[str]:
     return [source_name for source_name in sources if get_adapter(source_name).supports_live]
 
 
-def run_scrape_for_source(db: Session, source: str, mode: str = "auto") -> ScrapeRun:
+def run_scrape_for_source(db: Session, source: str, mode: str = "auto", trigger: str = "manual") -> ScrapeRun:
     settings = get_settings()
     scrape_progress.set_current_source(source)
-    run = ScrapeRun(source=source, status="running")
+    run = ScrapeRun(source=source, status="running", trigger=trigger)
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -74,15 +74,15 @@ def run_scrape_for_source(db: Session, source: str, mode: str = "auto") -> Scrap
     return run
 
 
-def run_scrape(db: Session, source: str = "all", mode: str = "auto") -> list[ScrapeRun]:
+def run_scrape(db: Session, source: str = "all", mode: str = "auto", trigger: str = "manual") -> list[ScrapeRun]:
     settings = get_settings()
     use_live = mode == "live" or (mode == "auto" and settings.allow_live_scraping)
     use_live = use_live or mode in {"quick", "full"}
     sources = resolve_live_sources(source) if use_live else resolve_sources(source)
-    return [run_scrape_for_source(db, source_name, mode=mode) for source_name in sources]
+    return [run_scrape_for_source(db, source_name, mode=mode, trigger=trigger) for source_name in sources]
 
 
-def start_scrape_in_background(source: str = "all", mode: str = "quick") -> bool:
+def start_scrape_in_background(source: str = "all", mode: str = "quick", trigger: str = "manual") -> bool:
     settings = get_settings()
     use_live = mode == "live" or (mode == "auto" and settings.allow_live_scraping)
     use_live = use_live or mode in {"quick", "full"}
@@ -95,6 +95,7 @@ def start_scrape_in_background(source: str = "all", mode: str = "quick") -> bool
     with SessionLocal() as db:
         task = ScrapeTask(
             status="running",
+            trigger=trigger,
             mode=mode,
             sources=",".join(sources),
             current_source=sources[0] if sources else None,
@@ -113,7 +114,7 @@ def start_scrape_in_background(source: str = "all", mode: str = "quick") -> bool
                     if scrape_progress.is_stop_requested():
                         break
                     _sync_task_progress(db, task_id, current_source=source_name)
-                    run_scrape_for_source(db, source_name, mode=mode)
+                    run_scrape_for_source(db, source_name, mode=mode, trigger=trigger)
                 final_status = "stopped" if scrape_progress.is_stop_requested() else "success"
                 _sync_task_progress(db, task_id, status=final_status, finished=True)
             scrape_progress.finish()
