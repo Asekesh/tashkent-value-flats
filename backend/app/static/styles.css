@@ -1336,15 +1336,17 @@ select:focus {
 }
 
 @media print {
-  body * {
-    visibility: hidden;
+  @page {
+    margin: 12mm;
   }
-  .cma-overlay,
-  .cma-overlay * {
-    visibility: visible;
+  body > *:not(.cma-overlay) {
+    display: none !important;
   }
   .cma-overlay {
     background: #ffffff;
+    display: block !important;
+    inset: auto;
+    overflow: visible;
     padding: 0;
     position: static;
   }
@@ -1355,5 +1357,11 @@ select:focus {
   }
   .cma-header-actions {
     display: none;
+  }
+  .cma-summary,
+  .cma-chart,
+  .cma-table-wrap {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

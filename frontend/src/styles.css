@@ -1085,12 +1085,17 @@ select:focus {
 }
 
 @media print {
-  .app-shell > .sidebar,
-  .topbar,
-  .cma-overlay {
-    background: #ffffff;
+  @page {
+    margin: 12mm;
+  }
+  body > *:not(.cma-overlay) {
+    display: none !important;
   }
   .cma-overlay {
+    background: #ffffff;
+    display: block !important;
+    inset: auto;
+    overflow: visible;
     padding: 0;
     position: static;
   }
@@ -1099,9 +1104,14 @@ select:focus {
     box-shadow: none;
     max-width: none;
   }
-  .cma-header-actions,
-  .icon-button {
+  .cma-header-actions {
     display: none;
+  }
+  .cma-summary,
+  .cma-chart,
+  .cma-table-wrap {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 
