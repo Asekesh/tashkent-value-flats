@@ -42,11 +42,10 @@ const taskListEl = document.querySelector("#taskList");
 let progressPollTimer = null;
 let tasksState = [];
 
-document.querySelector("#refreshButton").addEventListener("click", () => fetchListings());
-document.querySelector("#importButton").addEventListener("click", () => runScrapeMode("quick"));
 document.querySelector("#adminImportButton").addEventListener("click", () => runScrapeMode("quick"));
 document.querySelector("#quickScanButton").addEventListener("click", () => runScrapeMode("quick"));
 document.querySelector("#fullScanButton").addEventListener("click", () => runScrapeMode("full"));
+document.querySelector("#stopScanButton").addEventListener("click", stopScrape);
 document.querySelector("#applyButton").addEventListener("click", () => fetchListings(readFilters()));
 document.querySelector("#resetButton").addEventListener("click", resetFilters);
 document.querySelector("#refreshRunsButton").addEventListener("click", fetchTasks);
@@ -118,6 +117,20 @@ async function runScrapeMode(mode = "quick") {
   }
 }
 
+async function stopScrape() {
+  const button = document.querySelector("#stopScanButton");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "■ Останавливаем...";
+  }
+  statusEl.textContent = "Останавливаем парсинг...";
+  try {
+    await fetch("/api/admin/scrape/stop", { method: "POST" });
+  } catch {
+    // безмолвно: следующий polling всё равно подтянет состояние
+  }
+}
+
 function startProgressPolling() {
   stopProgressPolling();
   pollProgressOnce();
@@ -166,10 +179,25 @@ function showProgress(state) {
   const src = state.current_source ? ` · ${sourceLabel(state.current_source)}` : "";
   progressTitleEl.textContent = `${id}${src}`;
   progressMetaEl.textContent = state.started_at ? `Начало: ${formatDateTime(state.started_at)}` : "Начало: —";
+  const stopButton = document.querySelector("#stopScanButton");
+  if (stopButton) {
+    if (state.stop_requested) {
+      stopButton.disabled = true;
+      stopButton.textContent = "■ Останавливаем...";
+    } else {
+      stopButton.disabled = false;
+      stopButton.textContent = "■ Остановить";
+    }
+  }
 }
 
 function hideProgress() {
   progressEl.hidden = true;
+  const stopButton = document.querySelector("#stopScanButton");
+  if (stopButton) {
+    stopButton.disabled = false;
+    stopButton.textContent = "■ Остановить";
+  }
 }
 
 function renderTaskList() {
@@ -473,6 +501,7 @@ function setView(view) {
 
 function setBusy(isBusy, message) {
   document.querySelectorAll("button").forEach((button) => {
+    if (button.id === "stopScanButton") return;
     button.disabled = isBusy;
   });
   statusEl.classList.toggle("loading", isBusy);

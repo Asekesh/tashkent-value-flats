@@ -110,9 +110,12 @@ def start_scrape_in_background(source: str = "all", mode: str = "quick") -> bool
         try:
             with SessionLocal() as db:
                 for source_name in sources:
+                    if scrape_progress.is_stop_requested():
+                        break
                     _sync_task_progress(db, task_id, current_source=source_name)
                     run_scrape_for_source(db, source_name, mode=mode)
-                _sync_task_progress(db, task_id, status="success", finished=True)
+                final_status = "stopped" if scrape_progress.is_stop_requested() else "success"
+                _sync_task_progress(db, task_id, status=final_status, finished=True)
             scrape_progress.finish()
         except Exception as exc:  # pragma: no cover - background safety net
             with SessionLocal() as db:
@@ -196,7 +199,7 @@ def _run_live_scan(
 ) -> tuple[int, int]:
     page_limit = None if mode in {"quick", "full"} else max_pages
     known_stop = quick_known_stop_threshold if mode == "quick" else None
-    known_streak = 0
+    known_total = 0
     new_count = 0
     updated_count = 0
 
@@ -212,19 +215,18 @@ def _run_live_scan(
             if is_new:
                 new_count += 1
                 page_new += 1
-                known_streak = 0
             else:
                 updated_count += 1
                 page_updated += 1
-                known_streak = known_streak + 1 if known_before else 0
-            if known_stop and known_streak >= known_stop:
-                db.commit()
-                scrape_progress.increment(pages=1, found=page_found, new=page_new, updated=page_updated)
-                _sync_task_from_progress(db)
-                return new_count, updated_count
+                if known_before:
+                    known_total += 1
         db.commit()
         scrape_progress.increment(pages=1, found=page_found, new=page_new, updated=page_updated)
         _sync_task_from_progress(db)
+        if scrape_progress.is_stop_requested():
+            return new_count, updated_count
+        if known_stop and known_total >= known_stop:
+            return new_count, updated_count
 
     return new_count, updated_count
 
