@@ -50,6 +50,40 @@ class ListingsPage(BaseModel):
     total: int
 
 
+class CmaAnalogOut(BaseModel):
+    id: int
+    source: str
+    url: str
+    title: str
+    price_usd: float
+    area_m2: float
+    price_per_m2_usd: float
+    rooms: int
+    floor: Optional[int]
+    district: str
+    address_raw: str
+    seen_at: str
+
+
+class CmaStatsOut(BaseModel):
+    count: int
+    avg_price_per_m2_usd: Optional[float]
+    median_price_per_m2_usd: Optional[float]
+    min_price_per_m2_usd: Optional[float]
+    max_price_per_m2_usd: Optional[float]
+    avg_price_usd: Optional[float]
+
+
+class CmaResultOut(BaseModel):
+    subject: CmaAnalogOut
+    basis: str
+    basis_label: str
+    area_tolerance_percent: float
+    stats: CmaStatsOut
+    subject_vs_market_percent: Optional[float]
+    analogs: list[CmaAnalogOut]
+
+
 class ScrapeRunRequest(BaseModel):
     source: str = "all"
     mode: str = "auto"

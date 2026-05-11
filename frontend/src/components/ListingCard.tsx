@@ -1,4 +1,4 @@
-import { Building2, Calendar, ExternalLink, Heart, MapPin, Ruler, TrendingDown, User } from "lucide-react";
+import { BarChart3, Building2, Calendar, ExternalLink, Heart, MapPin, Ruler, TrendingDown, User } from "lucide-react";
 import type { Listing } from "../types";
 import { bestPhoto, formatDate, isHotDeal, money, sellerLabel, sourceLabel } from "../utils";
 
@@ -9,6 +9,7 @@ export function ListingCard({
   favorite,
   onSelect,
   onToggleFavorite,
+  onOpenCma,
 }: {
   listing: Listing;
   rank?: number;
@@ -16,6 +17,7 @@ export function ListingCard({
   favorite: boolean;
   onSelect: (listing: Listing) => void;
   onToggleFavorite: (listing: Listing) => void;
+  onOpenCma?: (listing: Listing) => void;
 }) {
   const discount = listing.market?.discount_percent;
   const photo = bestPhoto(listing);
@@ -78,6 +80,20 @@ export function ListingCard({
             >
               <Heart size={15} />
             </button>
+            {onOpenCma && (
+              <button
+                className="outline-link"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenCma(listing);
+                }}
+                title="Сравнительный анализ"
+              >
+                <BarChart3 size={14} />
+                Найти аналоги
+              </button>
+            )}
             <a className="outline-link" href={listing.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
               <ExternalLink size={14} />
               Источник

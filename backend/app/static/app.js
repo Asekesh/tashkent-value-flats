@@ -446,6 +446,7 @@ function listingCard(listing, rank) {
           <div><strong>$${money(listing.price_usd)}</strong><span>рынок: ${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}/м²` : "мало данных"}</span></div>
           <div class="row-actions">
             <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">♡</button>
+            <button class="outline-link" data-cma="${listing.id}" title="Сравнительный анализ" type="button">▤ Найти аналоги</button>
             <a class="outline-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">↗ Источник</a>
           </div>
         </div>
@@ -469,6 +470,190 @@ function bindCards(root) {
       toggleFavorite(Number(button.dataset.favorite));
     });
   });
+  root.querySelectorAll("[data-cma]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openCma(Number(button.dataset.cma));
+    });
+  });
+}
+
+async function openCma(listingId) {
+  const listing = state.listings.find((item) => item.id === listingId);
+  showCmaModal(listing);
+  try {
+    const response = await fetch(`/api/cma/${listingId}`);
+    if (!response.ok) throw new Error("cma_failed");
+    const result = await response.json();
+    renderCmaBody(result);
+  } catch {
+    renderCmaError("Не удалось загрузить аналоги");
+  }
+}
+
+function showCmaModal(listing) {
+  let overlay = document.querySelector("#cmaOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "cmaOverlay";
+    overlay.className = "cma-overlay";
+    overlay.innerHTML = `
+      <div class="cma-modal" id="cmaModal">
+        <header class="cma-header">
+          <div>
+            <h2>Сравнительный анализ</h2>
+            <p id="cmaSubjectTitle"></p>
+          </div>
+          <div class="cma-header-actions">
+            <button class="ghost-button" id="cmaPrintButton" type="button" disabled>▤ PDF / Печать</button>
+            <button class="icon-button" id="cmaCloseButton" type="button" aria-label="Закрыть">×</button>
+          </div>
+        </header>
+        <div class="cma-body" id="cmaBody"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeCma();
+    });
+    overlay.querySelector("#cmaCloseButton").addEventListener("click", closeCma);
+    overlay.querySelector("#cmaPrintButton").addEventListener("click", () => window.print());
+  }
+  overlay.querySelector("#cmaSubjectTitle").textContent = listing?.title ?? "";
+  overlay.querySelector("#cmaBody").innerHTML = `<div class="cma-loading">⟳ Подбираем аналоги...</div>`;
+  overlay.querySelector("#cmaPrintButton").disabled = true;
+  overlay.classList.add("active");
+}
+
+function closeCma() {
+  const overlay = document.querySelector("#cmaOverlay");
+  if (overlay) overlay.classList.remove("active");
+}
+
+function renderCmaError(message) {
+  const body = document.querySelector("#cmaBody");
+  if (body) body.innerHTML = `<div class="cma-error">${escapeHtml(message)}</div>`;
+}
+
+function renderCmaBody(result) {
+  const body = document.querySelector("#cmaBody");
+  if (!body) return;
+  const printButton = document.querySelector("#cmaPrintButton");
+  if (printButton) printButton.disabled = false;
+
+  const { subject, stats, analogs, basis_label, subject_vs_market_percent } = result;
+  const verdict = makeCmaVerdict(subject_vs_market_percent);
+
+  const summaryRows = [
+    ["База сравнения", escapeHtml(basis_label)],
+    ["Найдено аналогов", formatNumber(stats.count)],
+    ["Этот объект", `$${money(subject.price_usd)} · $${money(subject.price_per_m2_usd)}/м² · ${subject.area_m2} м²`],
+  ];
+  if (stats.median_price_per_m2_usd) summaryRows.push(["Медиана по рынку", `$${money(stats.median_price_per_m2_usd)}/м²`]);
+  if (stats.avg_price_per_m2_usd) summaryRows.push(["Среднее по рынку", `$${money(stats.avg_price_per_m2_usd)}/м²`]);
+  if (stats.min_price_per_m2_usd && stats.max_price_per_m2_usd) {
+    summaryRows.push(["Диапазон $/м²", `$${money(stats.min_price_per_m2_usd)} – $${money(stats.max_price_per_m2_usd)}`]);
+  }
+
+  const summaryHtml = summaryRows
+    .map(([label, value]) => `<div class="cma-summary-row"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
+
+  const verdictHtml = verdict
+    ? `<div class="cma-verdict ${verdict.kind}"><strong>${escapeHtml(verdict.title)}</strong><span>${escapeHtml(verdict.body)}</span></div>`
+    : "";
+
+  const chartHtml = analogs.length ? cmaChart(subject, analogs, stats.median_price_per_m2_usd) : "";
+  const tableHtml = analogs.length ? cmaTable(subject, analogs) : "";
+  const emptyHtml = analogs.length
+    ? ""
+    : `<div class="cma-empty">В базе нет похожих объявлений по этим параметрам. Расширьте сбор данных или попробуйте позже.</div>`;
+
+  body.innerHTML = `
+    <section class="cma-summary">${summaryHtml}${verdictHtml}</section>
+    ${chartHtml}
+    ${tableHtml}
+    ${emptyHtml}
+  `;
+}
+
+function cmaChart(subject, analogs, median) {
+  const points = [
+    { id: subject.id, ppm: subject.price_per_m2_usd, isSubject: true },
+    ...analogs.map((a) => ({ id: a.id, ppm: a.price_per_m2_usd, isSubject: false })),
+  ];
+  const max = Math.max(...points.map((p) => p.ppm)) * 1.05;
+  const min = Math.min(...points.map((p) => p.ppm)) * 0.95;
+  const range = (max - min) || 1;
+  const barWidth = 100 / points.length;
+  const medianLine = median
+    ? `<line x1="0" x2="100" y1="${50 - ((median - min) / range) * 50}" y2="${50 - ((median - min) / range) * 50}" stroke="#2563eb" stroke-dasharray="0.6,0.6" stroke-width="0.3" />`
+    : "";
+  const bars = points
+    .map((p, index) => {
+      const height = ((p.ppm - min) / range) * 50;
+      const x = index * barWidth + barWidth * 0.15;
+      const w = barWidth * 0.7;
+      const y = 50 - height;
+      const fill = p.isSubject ? "#dc2626" : "#94a3b8";
+      return `<rect x="${x}" y="${y}" width="${w}" height="${height}" fill="${fill}" />`;
+    })
+    .join("");
+  const medianLegend = median ? `<span><i style="background:#2563eb"></i> медиана $${money(median)}/м²</span>` : "";
+  return `
+    <section class="cma-chart">
+      <h3>$/м² — этот объект vs аналоги</h3>
+      <div class="cma-chart-frame">
+        <svg viewBox="0 0 100 50" preserveAspectRatio="none" class="cma-chart-svg">${medianLine}${bars}</svg>
+        <div class="cma-chart-legend">
+          <span><i style="background:#dc2626"></i> этот объект</span>
+          <span><i style="background:#94a3b8"></i> аналоги</span>
+          ${medianLegend}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function cmaTable(subject, analogs) {
+  const rows = analogs
+    .map((a) => {
+      const diff = ((subject.price_per_m2_usd / a.price_per_m2_usd - 1) * 100);
+      const positive = diff > 0;
+      return `
+        <tr>
+          <td>${escapeHtml(sourceLabel(a.source))}</td>
+          <td>${escapeHtml(a.address_raw || "—")}</td>
+          <td>${a.area_m2} м²</td>
+          <td>${a.floor ?? "—"}</td>
+          <td>$${money(a.price_usd)}</td>
+          <td>$${money(a.price_per_m2_usd)}</td>
+          <td class="${positive ? "diff-pos" : "diff-neg"}">${positive ? "+" : ""}${diff.toFixed(1)}%</td>
+          <td><a class="outline-link cma-table-link" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer">↗</a></td>
+        </tr>
+      `;
+    })
+    .join("");
+  return `
+    <section class="cma-table-wrap">
+      <h3>Аналоги (${analogs.length})</h3>
+      <table class="cma-table">
+        <thead><tr><th>Источник</th><th>Адрес</th><th>Площадь</th><th>Этаж</th><th>Цена</th><th>$/м²</th><th>vs объект</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>
+  `;
+}
+
+function makeCmaVerdict(diff) {
+  if (diff === null || diff === undefined) return null;
+  if (diff <= -10) {
+    return { kind: "good", title: `Хорошая цена: на ${Math.abs(diff).toFixed(1)}% ниже рынка`, body: "Можно смело предлагать клиенту — объект интересный." };
+  }
+  if (diff >= 10) {
+    return { kind: "bad", title: `Дорого: на ${diff.toFixed(1)}% выше рынка`, body: "Аргумент для торга — покажите медиану по аналогам." };
+  }
+  return { kind: "neutral", title: `Цена в рынке: отклонение ${diff > 0 ? "+" : ""}${diff.toFixed(1)}%`, body: "Объект продаётся по средней цене для этого сегмента." };
 }
 
 function toggleFavorite(id) {

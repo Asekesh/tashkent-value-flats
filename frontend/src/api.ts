@@ -1,4 +1,4 @@
-import type { DashboardStats, Filters, ListingsPage, ScrapeRun, ScrapeSource } from "./types";
+import type { CmaResult, DashboardStats, Filters, ListingsPage, ScrapeRun, ScrapeSource } from "./types";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -46,6 +46,12 @@ export async function fetchScrapeRuns(): Promise<ScrapeRun[]> {
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   const response = await fetch(`${API_BASE_URL}/api/listings/stats`);
   if (!response.ok) throw new Error("Не удалось загрузить статистику");
+  return response.json();
+}
+
+export async function fetchCma(listingId: number): Promise<CmaResult> {
+  const response = await fetch(`${API_BASE_URL}/api/cma/${listingId}`);
+  if (!response.ok) throw new Error("Не удалось загрузить аналоги");
   return response.json();
 }
 

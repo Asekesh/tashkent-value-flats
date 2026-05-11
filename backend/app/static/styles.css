@@ -1123,3 +1123,237 @@ select:focus {
   font-size: 14px;
   padding: 12px 0;
 }
+
+.cma-overlay {
+  align-items: flex-start;
+  background: rgba(15, 23, 42, 0.55);
+  display: none;
+  inset: 0;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 32px 16px;
+  position: fixed;
+  z-index: 100;
+}
+
+.cma-overlay.active {
+  display: flex;
+}
+
+.cma-modal {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  max-width: 980px;
+  width: 100%;
+}
+
+.cma-header {
+  align-items: flex-start;
+  border-bottom: 1px solid #eeeeee;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 18px 20px;
+}
+
+.cma-header h2 {
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+
+.cma-header p {
+  color: #666666;
+  font-size: 13px;
+  margin: 0;
+}
+
+.cma-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cma-loading,
+.cma-error,
+.cma-empty {
+  align-items: center;
+  color: #666666;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding: 40px;
+}
+
+.cma-error {
+  color: #dc2626;
+}
+
+.cma-body {
+  padding: 20px;
+}
+
+.cma-summary {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+}
+
+.cma-summary-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.cma-summary-row span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.cma-summary-row strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.cma-verdict {
+  border-radius: 7px;
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 10px 12px;
+}
+
+.cma-verdict strong {
+  font-size: 14px;
+}
+
+.cma-verdict span {
+  font-size: 13px;
+}
+
+.cma-verdict.good {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.cma-verdict.bad {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.cma-verdict.neutral {
+  background: #e0e7ff;
+  color: #1e3a8a;
+}
+
+.cma-chart {
+  margin-bottom: 18px;
+}
+
+.cma-chart h3,
+.cma-table-wrap h3 {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+
+.cma-chart-frame {
+  background: #ffffff;
+  border: 1px solid #eeeeee;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.cma-chart-svg {
+  display: block;
+  height: 140px;
+  width: 100%;
+}
+
+.cma-chart-legend {
+  color: #475569;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.cma-chart-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.cma-chart-legend i {
+  border-radius: 2px;
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+}
+
+.cma-table-wrap {
+  overflow-x: auto;
+}
+
+.cma-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+}
+
+.cma-table th,
+.cma-table td {
+  border-bottom: 1px solid #eeeeee;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.cma-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cma-table-link {
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.diff-pos {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.diff-neg {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .cma-overlay,
+  .cma-overlay * {
+    visibility: visible;
+  }
+  .cma-overlay {
+    background: #ffffff;
+    padding: 0;
+    position: static;
+  }
+  .cma-modal {
+    border: none;
+    box-shadow: none;
+    max-width: none;
+  }
+  .cma-header-actions {
+    display: none;
+  }
+}

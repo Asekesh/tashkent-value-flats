@@ -91,3 +91,37 @@ export type DashboardStats = {
   sources: SourceStat[];
   hot_threshold_percent: number;
 };
+
+export type CmaAnalog = {
+  id: number;
+  source: string;
+  url: string;
+  title: string;
+  price_usd: number;
+  area_m2: number;
+  price_per_m2_usd: number;
+  rooms: number;
+  floor: number | null;
+  district: string;
+  address_raw: string;
+  seen_at: string;
+};
+
+export type CmaStats = {
+  count: number;
+  avg_price_per_m2_usd: number | null;
+  median_price_per_m2_usd: number | null;
+  min_price_per_m2_usd: number | null;
+  max_price_per_m2_usd: number | null;
+  avg_price_usd: number | null;
+};
+
+export type CmaResult = {
+  subject: CmaAnalog;
+  basis: "building" | "district";
+  basis_label: string;
+  area_tolerance_percent: number;
+  stats: CmaStats;
+  subject_vs_market_percent: number | null;
+  analogs: CmaAnalog[];
+};

@@ -16,6 +16,7 @@ export function Dashboard({
   onViewListings,
   onQuickFilter,
   onSourceChange,
+  onOpenCma,
 }: {
   listings: Listing[];
   total: number;
@@ -28,6 +29,7 @@ export function Dashboard({
   onViewListings: () => void;
   onQuickFilter: (filters: Partial<Filters>) => void;
   onSourceChange: (source: string) => void;
+  onOpenCma?: (listing: Listing) => void;
 }) {
   const bestDeals = [...listings]
     .filter((listing) => listing.market?.discount_percent != null)
@@ -119,6 +121,7 @@ export function Dashboard({
                 favorite={favorites.includes(listing.id)}
                 onSelect={onSelect}
                 onToggleFavorite={onToggleFavorite}
+                onOpenCma={onOpenCma}
               />
             ))
           ) : (

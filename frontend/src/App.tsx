@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { defaultFilters, fetchDashboardStats, fetchListings, fetchScrapeRuns, fetchScrapeSources, runScrape } from "./api";
+import { CmaModal } from "./components/CmaModal";
 import { Sidebar, TopBar } from "./components/Shell";
 import { AdminPage } from "./pages/AdminPage";
 import { Dashboard } from "./pages/Dashboard";
@@ -21,6 +22,7 @@ export default function App() {
   const [status, setStatus] = useState("Готово");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dashboardSource, setDashboardSource] = useState<string>("");
+  const [cmaListing, setCmaListing] = useState<Listing | null>(null);
 
   const districts = useMemo(() => Array.from(new Set(listings.map((item) => item.district).filter(Boolean))).sort(), [listings]);
 
@@ -130,6 +132,7 @@ export default function App() {
             onViewListings={() => setView("listings")}
             onQuickFilter={applyQuickFilter}
             onSourceChange={changeDashboardSource}
+            onOpenCma={setCmaListing}
           />
         )}
         {view === "listings" && (
@@ -145,6 +148,7 @@ export default function App() {
             onReset={() => loadListings(defaultFilters)}
             onSelect={setSelected}
             onToggleFavorite={toggleFavorite}
+            onOpenCma={setCmaListing}
           />
         )}
         {view === "admin" && (
@@ -158,6 +162,7 @@ export default function App() {
           />
         )}
       </div>
+      {cmaListing && <CmaModal listing={cmaListing} onClose={() => setCmaListing(null)} />}
     </div>
   );
 }

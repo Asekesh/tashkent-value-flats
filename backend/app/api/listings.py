@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import Listing
-from app.schemas.listing import ListingOut, ListingsPage, MarketEstimate
+from app.schemas.listing import CmaResultOut, ListingOut, ListingsPage, MarketEstimate
+from app.services.cma import build_cma
 from app.services.listings import count_listings, listing_to_dict
 from app.services.market import estimate_market
 
@@ -169,6 +170,23 @@ def get_listing(listing_id: int, db: Session = Depends(get_db)) -> ListingOut:
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
     return _with_market(db, listing)
+
+
+@router.get("/cma/{listing_id}", response_model=CmaResultOut)
+def get_cma(listing_id: int, db: Session = Depends(get_db)) -> CmaResultOut:
+    listing = db.get(Listing, listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    result = build_cma(db, listing)
+    return CmaResultOut(
+        subject=result.subject.__dict__,
+        basis=result.basis,
+        basis_label=result.basis_label,
+        area_tolerance_percent=result.area_tolerance_percent,
+        stats=result.stats.__dict__,
+        subject_vs_market_percent=result.subject_vs_market_percent,
+        analogs=[a.__dict__ for a in result.analogs],
+    )
 
 
 @router.get("/market/estimate", response_model=MarketEstimate)
