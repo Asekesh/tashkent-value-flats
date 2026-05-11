@@ -9,6 +9,7 @@ from typing import Optional
 @dataclass
 class ScrapeProgressState:
     is_running: bool = False
+    stop_requested: bool = False
     task_id: Optional[int] = None
     mode: str = ""
     sources: list[str] = field(default_factory=list)
@@ -24,6 +25,7 @@ class ScrapeProgressState:
     def to_dict(self) -> dict:
         return {
             "is_running": self.is_running,
+            "stop_requested": self.stop_requested,
             "task_id": self.task_id,
             "mode": self.mode,
             "sources": self.sources,
@@ -82,7 +84,21 @@ def increment(*, pages: int = 0, found: int = 0, new: int = 0, updated: int = 0)
 def finish(error: Optional[str] = None) -> None:
     with _lock:
         _state.is_running = False
+        _state.stop_requested = False
         _state.finished_at = datetime.utcnow()
         _state.current_source = None
         if error:
             _state.last_error = error
+
+
+def request_stop() -> bool:
+    with _lock:
+        if not _state.is_running:
+            return False
+        _state.stop_requested = True
+        return True
+
+
+def is_stop_requested() -> bool:
+    with _lock:
+        return _state.stop_requested

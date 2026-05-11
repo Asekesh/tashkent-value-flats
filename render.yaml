@@ -17,7 +17,17 @@ services:
       - key: CORS_ORIGINS
         value: https://tashkent-value-flats.onrender.com
       - key: ALLOW_LIVE_SCRAPING
-        value: false
+        value: true
+      - key: ENABLE_SCRAPE_SCHEDULER
+        value: true
+      - key: SCRAPE_INTERVAL_MINUTES
+        value: 15
+      - key: SCHEDULED_SCRAPE_SOURCES
+        value: olx,uybor,realt24
+      - key: SCHEDULED_SCRAPE_MODE
+        value: quick
+      - key: QUICK_KNOWN_STOP_THRESHOLD
+        value: 50
       - key: SEED_FIXTURES_ON_STARTUP
         value: true
 

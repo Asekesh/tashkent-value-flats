@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     scheduled_scrape_mode: str = "quick"
     live_scrape_max_pages: int = 1
     live_scrape_delay_seconds: float = 2.0
-    quick_known_stop_threshold: int = 100
+    quick_known_stop_threshold: int = 50
     min_listing_price_usd: float = 5000.0
     min_listing_price_per_m2_usd: float = 100.0
     below_market_threshold: float = 0.15

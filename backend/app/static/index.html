@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ташкент Недвижимость</title>
-    <link rel="icon" href="/static/favicon.png?v=20260511-logo" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260511-logo" />
+    <link rel="icon" href="/static/favicon.png?v=20260511-stopbtn" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260511-stopbtn" />
   </head>
   <body>
     <main class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <img class="brand-logo" src="/static/favicon.png?v=20260511-logo" alt="Логотип" />
+          <img class="brand-logo" src="/static/favicon.png?v=20260511-stopbtn" alt="Логотип" />
           <div>
             <strong>Ташкент Недвижимость</strong>
             <span>Квартиры и дома в столице</span>
@@ -36,8 +36,6 @@
           </div>
           <div class="topbar-actions">
             <span id="status" class="status">Готово</span>
-            <button id="refreshButton" class="icon-button" title="Обновить список" type="button">↻</button>
-            <button id="importButton" class="primary-button" type="button">▣ Быстрый сбор</button>
           </div>
         </header>
 
@@ -54,6 +52,7 @@
             <div><b id="scrapeProgressFound">0</b><span>найдено</span></div>
             <div><b class="accent" id="scrapeProgressNew">0</b><span>новых</span></div>
           </div>
+          <button id="stopScanButton" class="ghost-button stop-button" type="button">■ Остановить</button>
         </div>
 
         <section id="dashboardView" class="view active page">
@@ -154,7 +153,7 @@
                 <button id="quickScanButton" class="primary-button scan-button" type="button">▷ Запустить сейчас</button>
                 <button id="fullScanButton" class="ghost-button scan-button" type="button">▷ Полное сканирование</button>
               </div>
-              <p class="scan-note"><strong>Запустить сейчас</strong> — быстрый режим, стоп после 100 известных подряд. <strong>Полное сканирование</strong> — проходит все страницы выбранных площадок.</p>
+              <p class="scan-note"><strong>Запустить сейчас</strong> — быстрый режим, стоп после 50 уже известных объявлений. <strong>Полное сканирование</strong> — проходит все страницы выбранных площадок. Запущенный парсинг можно остановить кнопкой в карточке прогресса.</p>
               <div class="source-picker" id="sourcePicker" aria-label="Площадки для сканирования">
                 <label><input type="checkbox" value="olx" checked /> OLX</label>
                 <label><input type="checkbox" value="uybor" checked /> Uybor</label>
@@ -162,7 +161,7 @@
               </div>
               <div class="auto-row">
                 <span>Авто-парсинг</span>
-                <strong>Включен: каждые 15 минут, быстрый режим</strong>
+                <strong>Включен: каждые 15 минут · 3 площадки · стоп при 50 дублях</strong>
               </div>
             </article>
             <article class="admin-card">
@@ -187,6 +186,6 @@
         </section>
       </div>
     </main>
-    <script src="/static/app.js?v=20260511-logo"></script>
+    <script src="/static/app.js?v=20260511-stopbtn"></script>
   </body>
 </html>

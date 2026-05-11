@@ -29,6 +29,12 @@ def get_progress() -> dict:
     return scrape_progress.get_state()
 
 
+@router.post("/scrape/stop")
+def stop_scrape() -> dict:
+    accepted = scrape_progress.request_stop()
+    return {"stopped": accepted, "progress": scrape_progress.get_state()}
+
+
 @router.get("/scrape/runs", response_model=list[ScrapeRunOut])
 def get_scrape_runs(db: Session = Depends(get_db)) -> list[ScrapeRunOut]:
     return list(db.scalars(select(ScrapeRun).order_by(desc(ScrapeRun.started_at)).limit(50)).all())
