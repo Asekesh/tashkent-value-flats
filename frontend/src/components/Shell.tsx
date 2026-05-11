@@ -1,4 +1,4 @@
-import { BarChart3, Building2, Database, Home, RefreshCcw, Settings, TrendingDown } from "lucide-react";
+import { BarChart3, Building2, Database, Home, RefreshCcw, Settings } from "lucide-react";
 import type { View } from "../types";
 
 const navItems: Array<{ view: View; label: string; description: string; icon: typeof Home }> = [
@@ -11,12 +11,10 @@ export function Sidebar({ activeView, onViewChange }: { activeView: View; onView
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">
-          <TrendingDown size={18} />
-        </div>
+        <img className="brand-logo" src="/favicon.png" alt="Логотип" />
         <div>
-          <strong>Аналитик недвижимости</strong>
-          <span>Ташкент</span>
+          <strong>Ташкент Недвижимость</strong>
+          <span>Квартиры и дома в столице</span>
         </div>
       </div>
 
@@ -60,7 +58,6 @@ export function TopBar({
   return (
     <header className="topbar">
       <div>
-        <span className="eyebrow">Tashkent Value Flats</span>
         <h1>Рабочая панель цен ниже рынка</h1>
       </div>
       <div className="topbar-actions">

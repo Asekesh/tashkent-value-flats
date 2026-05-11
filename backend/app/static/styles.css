@@ -71,6 +71,15 @@ button:disabled {
   width: 34px;
 }
 
+.brand-logo {
+  border-radius: 8px;
+  display: block;
+  flex: 0 0 auto;
+  height: 40px;
+  width: 40px;
+  object-fit: contain;
+}
+
 .brand strong,
 .brand span,
 .nav-item strong,
