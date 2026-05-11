@@ -12,11 +12,13 @@ const defaultFilters = {
   sort: "discount",
 };
 
+const PAGE_SIZE = 50;
 const state = {
   view: "dashboard",
   listings: [],
   selectedId: null,
   total: 0,
+  page: 0,
   favorites: readFavorites(),
   runs: [],
   sourceStats: [],
@@ -46,7 +48,7 @@ document.querySelector("#adminImportButton").addEventListener("click", () => run
 document.querySelector("#quickScanButton").addEventListener("click", () => runScrapeMode("quick"));
 document.querySelector("#fullScanButton").addEventListener("click", () => runScrapeMode("full"));
 document.querySelector("#stopScanButton").addEventListener("click", stopScrape);
-document.querySelector("#applyButton").addEventListener("click", () => fetchListings(readFilters()));
+document.querySelector("#applyButton").addEventListener("click", () => fetchListings(readFilters(), 0));
 document.querySelector("#resetButton").addEventListener("click", resetFilters);
 document.querySelector("#refreshRunsButton").addEventListener("click", fetchTasks);
 document.querySelector("#refreshSourcePagesButton").addEventListener("click", fetchSourceStats);
@@ -58,18 +60,18 @@ document.querySelectorAll("[data-quick-rooms]").forEach((button) => {
   button.addEventListener("click", () => {
     writeFilters({ ...defaultFilters, rooms: button.dataset.quickRooms, sort: "discount" });
     setView("listings");
-    fetchListings(readFilters());
+    fetchListings(readFilters(), 0);
   });
 });
 document.querySelector("[data-quick-discount]").addEventListener("click", () => {
   writeFilters({ ...defaultFilters, discount_min: "15", sort: "discount" });
   setView("listings");
-  fetchListings(readFilters());
+  fetchListings(readFilters(), 0);
 });
 document.querySelector("[data-quick-ppm]").addEventListener("click", () => {
   writeFilters({ ...defaultFilters, sort: "price_per_m2" });
   setView("listings");
-  fetchListings(readFilters());
+  fetchListings(readFilters(), 0);
 });
 document.querySelectorAll("[data-stat-filter]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -83,7 +85,7 @@ document.querySelectorAll("[data-stat-filter]").forEach((button) => {
       writeFilters({ ...base, sort: "discount" });
     }
     setView("listings");
-    fetchListings(readFilters());
+    fetchListings(readFilters(), 0);
   });
 });
 document.querySelectorAll("[data-source-pill]").forEach((button) => {
@@ -92,9 +94,19 @@ document.querySelectorAll("[data-source-pill]").forEach((button) => {
     document.querySelectorAll("[data-source-pill]").forEach((el) => {
       el.classList.toggle("active", el.dataset.sourcePill === state.dashboardSource);
     });
-    fetchListings({ ...defaultFilters, source: state.dashboardSource, sort: "discount" });
+    fetchListings({ ...defaultFilters, source: state.dashboardSource, sort: "discount" }, 0);
   });
 });
+
+const scrollTopButton = document.querySelector("#scrollTopButton");
+if (scrollTopButton) {
+  scrollTopButton.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  const onScroll = () => {
+    scrollTopButton.hidden = window.scrollY <= 400;
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+}
 
 async function runScrapeMode(mode = "quick") {
   const sources = selectedSources();
@@ -160,7 +172,7 @@ async function pollProgressOnce() {
         statusEl.textContent = state.last_error
           ? `Ошибка сбора: ${state.last_error}`
           : `Готово: добавлено ${total}, страниц ${state.pages_scanned}`;
-        await fetchListings(readFilters());
+        await fetchListings(readFilters(), 0);
         await fetchTasks();
         await fetchDashboardStats();
       }
@@ -254,24 +266,31 @@ function formatDateTime(value) {
   return `${d}.${m}.${y}, ${h}:${min}`;
 }
 
-async function fetchListings(filters = readFilters()) {
+async function fetchListings(filters = readFilters(), page = 0) {
   setBusy(true, "Загружаем объявления...");
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value) params.set(key, value);
   });
-  params.set("limit", "100");
+  params.set("limit", String(PAGE_SIZE));
+  params.set("offset", String(page * PAGE_SIZE));
   try {
     const response = await fetch(`/api/listings?${params.toString()}`);
     const payload = await response.json();
     state.listings = payload.items ?? [];
     state.total = payload.total ?? state.listings.length;
+    state.page = page;
     state.selectedId = state.listings.find((item) => item.id === state.selectedId)?.id ?? state.listings[0]?.id ?? null;
     renderAll();
     setBusy(false, `Найдено: ${state.total}`);
   } catch {
     setBusy(false, "API недоступен");
   }
+}
+
+function goToPage(nextPage) {
+  fetchListings(readFilters(), nextPage);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function fetchRuns() {
@@ -328,7 +347,40 @@ function renderAll() {
   renderListingsList();
   renderInsight();
   renderRuns();
-  document.querySelector("#listingsTotal").textContent = state.total.toLocaleString();
+  renderListingsTotal();
+  renderPagination();
+}
+
+function renderListingsTotal() {
+  const total = state.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const from = total === 0 ? 0 : state.page * PAGE_SIZE + 1;
+  const to = Math.min(total, (state.page + 1) * PAGE_SIZE);
+  const el = document.querySelector("#listingsTotal");
+  if (!el) return;
+  el.textContent = `${total.toLocaleString()} объектов · показаны ${from.toLocaleString()}–${to.toLocaleString()} (стр. ${state.page + 1} из ${totalPages})`;
+}
+
+function renderPagination() {
+  const container = document.querySelector("#listingsPagination");
+  if (!container) return;
+  const total = state.total ?? 0;
+  if (total <= PAGE_SIZE) {
+    container.innerHTML = "";
+    return;
+  }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const prevDisabled = state.page <= 0 ? "disabled" : "";
+  const nextDisabled = state.page >= totalPages - 1 ? "disabled" : "";
+  container.innerHTML = `
+    <button type="button" class="ghost-button" data-page-prev ${prevDisabled}>← Назад</button>
+    <span class="pagination-info">Стр. ${state.page + 1} из ${totalPages}</span>
+    <button type="button" class="ghost-button" data-page-next ${nextDisabled}>Вперёд →</button>
+  `;
+  const prev = container.querySelector("[data-page-prev]");
+  const next = container.querySelector("[data-page-next]");
+  if (prev) prev.addEventListener("click", () => goToPage(state.page - 1));
+  if (next) next.addEventListener("click", () => goToPage(state.page + 1));
 }
 
 function renderStats() {
@@ -675,7 +727,7 @@ function writeFilters(filters) {
 
 function resetFilters() {
   writeFilters(defaultFilters);
-  fetchListings(defaultFilters);
+  fetchListings(defaultFilters, 0);
 }
 
 function setView(view) {

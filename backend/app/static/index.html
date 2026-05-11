@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ташкент Недвижимость</title>
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260511-cma2" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260511-pagination" />
   </head>
   <body>
     <main class="app-shell">
@@ -133,6 +133,7 @@
           </section>
 
           <section id="listingsList" class="deal-list"></section>
+          <div id="listingsPagination" class="pagination"></div>
         </section>
 
         <section id="adminView" class="view page">
@@ -186,6 +187,7 @@
         </section>
       </div>
     </main>
-    <script src="/static/app.js?v=20260511-cma2"></script>
+    <button id="scrollTopButton" class="scroll-top" type="button" aria-label="Наверх" hidden>↑</button>
+    <script src="/static/app.js?v=20260511-pagination"></script>
   </body>
 </html>
