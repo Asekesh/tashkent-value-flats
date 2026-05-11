@@ -16,12 +16,13 @@ export const defaultFilters: Filters = {
   sort: "discount",
 };
 
-export async function fetchListings(filters: Filters, limit = 100): Promise<ListingsPage> {
+export async function fetchListings(filters: Filters, limit = 50, offset = 0): Promise<ListingsPage> {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value) params.set(key, value);
   });
   params.set("limit", String(limit));
+  params.set("offset", String(offset));
   const response = await fetch(`${API_BASE_URL}/api/listings?${params.toString()}`);
   if (!response.ok) throw new Error("Не удалось загрузить объявления");
   return response.json();

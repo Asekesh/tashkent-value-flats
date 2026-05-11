@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timedelta
-from statistics import median
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import asc, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -22,8 +21,13 @@ from app.schemas.listing import (
     MarketEstimate,
 )
 from app.services.cma import build_cma
-from app.services.listings import count_listings, listing_to_dict
-from app.services.market import estimate_market
+from app.services.listings import listing_to_dict
+from app.services.market import (
+    MarketIndex,
+    build_market_index,
+    estimate_from_index,
+    estimate_market,
+)
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -70,59 +74,53 @@ def get_listings(
     if source:
         stmt = stmt.where(Listing.source == source)
 
-    total = count_listings(db, stmt)
-    if sort == "price_per_m2":
-        stmt = stmt.order_by(asc(Listing.price_per_m2_usd))
-    elif sort == "fresh":
-        stmt = stmt.order_by(desc(Listing.seen_at))
-    elif sort == "price":
-        stmt = stmt.order_by(asc(Listing.price_usd))
-    else:
-        stmt = stmt.order_by(asc(Listing.price_per_m2_usd))
+    # Один индекс рынка на весь запрос — та же формула, что в /listings/stats.
+    index = build_market_index(db)
+    all_listings = list(db.scalars(stmt).all())
+    items = [_build_item(listing, index) for listing in all_listings]
 
-    listings = list(db.scalars(stmt.limit(limit).offset(offset)).all())
-    items = [_with_market(db, listing) for listing in listings]
     if discount_min is not None:
-        items = [item for item in items if item.market and item.market.discount_percent is not None and item.market.discount_percent >= discount_min]
-        total = len(items)
+        items = [
+            item for item in items
+            if item.market and item.market.discount_percent is not None
+            and item.market.discount_percent >= discount_min
+        ]
+
     if sort == "discount":
         items.sort(key=lambda item: item.market.discount_percent if item.market and item.market.discount_percent is not None else -999, reverse=True)
-    return ListingsPage(items=items, total=total)
+    elif sort == "price_per_m2":
+        items.sort(key=lambda item: item.price_per_m2_usd if item.price_per_m2_usd is not None else 1e18)
+    elif sort == "fresh":
+        items.sort(key=lambda item: item.seen_at or "", reverse=True)
+    elif sort == "price":
+        items.sort(key=lambda item: item.price_usd if item.price_usd is not None else 1e18)
+
+    total = len(items)
+    page = items[offset : offset + limit]
+    return ListingsPage(items=page, total=total)
 
 
 @router.get("/listings/stats")
 def get_listings_stats(db: Session = Depends(get_db)) -> dict:
     settings = get_settings()
-    base_filters = (
-        Listing.status == "active",
-        Listing.price_usd >= settings.min_listing_price_usd,
-        Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
-    )
     rows = db.execute(
         select(
-            Listing.id,
             Listing.source,
             Listing.district,
             Listing.rooms,
             Listing.building_key,
             Listing.price_per_m2_usd,
+            Listing.area_m2,
             Listing.created_at,
-        ).where(*base_filters)
+        ).where(
+            Listing.status == "active",
+            Listing.price_usd >= settings.min_listing_price_usd,
+            Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
+        )
     ).all()
 
-    building_groups: dict[str, list[float]] = defaultdict(list)
-    district_room_groups: dict[tuple[str, int], list[float]] = defaultdict(list)
-    for row in rows:
-        if row.price_per_m2_usd is None:
-            continue
-        if row.building_key:
-            building_groups[row.building_key].append(row.price_per_m2_usd)
-        district_room_groups[(row.district, row.rooms)].append(row.price_per_m2_usd)
-
-    building_avg = {k: sum(v) / len(v) for k, v in building_groups.items() if len(v) >= 2}
-    district_room_median = {k: float(median(v)) for k, v in district_room_groups.items() if len(v) >= 3}
-
-    threshold = get_settings().below_market_threshold * 100
+    index = build_market_index(db)
+    threshold = settings.below_market_threshold * 100
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
 
@@ -136,31 +134,31 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
     for row in rows:
         total += 1
         sources_total[row.source] += 1
-        if row.price_per_m2_usd is None or row.price_per_m2_usd <= 0:
+        estimate = estimate_from_index(
+            index,
+            building_key=row.building_key,
+            district=row.district,
+            rooms=row.rooms,
+            area_m2=row.area_m2,
+            listing_price_per_m2=row.price_per_m2_usd,
+        )
+        if estimate.discount_percent is None or estimate.discount_percent < threshold:
             continue
-        market = None
-        if row.building_key:
-            market = building_avg.get(row.building_key)
-        if market is None:
-            market = district_room_median.get((row.district, row.rooms))
-        if not market or market <= 0:
-            continue
-        discount = (1 - row.price_per_m2_usd / market) * 100
-        if discount >= threshold:
-            hot += 1
-            sources_hot[row.source] += 1
-            if row.created_at and row.created_at >= today_start:
-                new_today_hot += 1
-            elif row.created_at and row.created_at >= yesterday_start:
-                new_yesterday_hot += 1
+        hot += 1
+        sources_hot[row.source] += 1
+        if row.created_at and row.created_at >= today_start:
+            new_today_hot += 1
+        elif row.created_at and row.created_at >= yesterday_start:
+            new_yesterday_hot += 1
 
-    sources = []
-    for source in sorted(sources_total.keys()):
-        sources.append({
+    sources = [
+        {
             "source": source,
             "total": sources_total[source],
             "hot": sources_hot.get(source, 0),
-        })
+        }
+        for source in sorted(sources_total.keys())
+    ]
 
     return {
         "total": total,
@@ -257,16 +255,19 @@ def get_market_estimate(
     return MarketEstimate(**estimate.__dict__)
 
 
-def _with_market(db: Session, listing: Listing) -> ListingOut:
-    estimate = estimate_market(
-        db,
+def _build_item(listing: Listing, index: MarketIndex) -> ListingOut:
+    estimate = estimate_from_index(
+        index,
+        building_key=listing.building_key,
         district=listing.district,
         rooms=listing.rooms,
         area_m2=listing.area_m2,
-        building_key=listing.building_key,
         listing_price_per_m2=listing.price_per_m2_usd,
-        exclude_listing_id=listing.id,
     )
     data = listing_to_dict(listing)
     data["market"] = MarketEstimate(**estimate.__dict__)
     return ListingOut(**data)
+
+
+def _with_market(db: Session, listing: Listing) -> ListingOut:
+    return _build_item(listing, build_market_index(db))

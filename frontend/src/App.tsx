@@ -9,6 +9,7 @@ import { ListingsPage } from "./pages/ListingsPage";
 import type { DashboardStats, Filters, Listing, ScrapeRun, ScrapeSource, View } from "./types";
 
 const FAVORITES_KEY = "tashkent-value-flats:favorites";
+const PAGE_SIZE = 50;
 
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
@@ -19,6 +20,7 @@ export default function App() {
   const [sourceStats, setSourceStats] = useState<ScrapeSource[]>([]);
   const [favorites, setFavorites] = useState<number[]>(() => readFavorites());
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Готово");
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -28,13 +30,14 @@ export default function App() {
 
   const districts = useMemo(() => Array.from(new Set(listings.map((item) => item.district).filter(Boolean))).sort(), [listings]);
 
-  async function loadListings(nextFilters = filters) {
+  async function loadListings(nextFilters = filters, nextPage = 0) {
     setLoading(true);
     setStatus("Загружаем объявления...");
     try {
-      const payload = await fetchListings(nextFilters);
+      const payload = await fetchListings(nextFilters, PAGE_SIZE, nextPage * PAGE_SIZE);
       setListings(payload.items);
       setTotal(payload.total);
+      setPage(nextPage);
       setSelected((current) => payload.items.find((item) => item.id === current?.id) ?? payload.items[0] ?? null);
       setStatus(`Найдено: ${payload.total}`);
     } catch {
@@ -42,6 +45,11 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function goToPage(nextPage: number) {
+    void loadListings(filters, nextPage);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function loadRuns() {
@@ -142,13 +150,16 @@ export default function App() {
           <ListingsPage
             listings={listings}
             total={total}
+            page={page}
+            pageSize={PAGE_SIZE}
             selected={selected}
             filters={filters}
             districts={districts}
             favorites={favorites}
             onFiltersChange={setFilters}
-            onApply={() => loadListings(filters)}
-            onReset={() => loadListings(defaultFilters)}
+            onApply={() => loadListings(filters, 0)}
+            onReset={() => loadListings(defaultFilters, 0)}
+            onPageChange={goToPage}
             onSelect={setSelected}
             onToggleFavorite={toggleFavorite}
             onOpenCma={setCmaListing}

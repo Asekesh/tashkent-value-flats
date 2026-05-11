@@ -1288,3 +1288,47 @@ select:focus {
     min-height: 170px;
   }
 }
+
+.pagination {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.pagination .ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.pagination-info {
+  color: #666666;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.scroll-top {
+  align-items: center;
+  background: #2563eb;
+  border: none;
+  border-radius: 50%;
+  bottom: 24px;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  height: 44px;
+  justify-content: center;
+  position: fixed;
+  right: 24px;
+  transition: transform 0.15s ease, background 0.15s ease;
+  width: 44px;
+  z-index: 50;
+}
+
+.scroll-top:hover {
+  background: #1d4ed8;
+  transform: translateY(-2px);
+}
+
