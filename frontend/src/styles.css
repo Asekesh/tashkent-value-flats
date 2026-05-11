@@ -999,6 +999,100 @@ select:focus {
   color: #1e3a8a;
 }
 
+.cma-verdict.warn {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+.history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+}
+
+.history-row.good {
+  background: #f0fdf4;
+  border-left-color: #16a34a;
+}
+
+.history-row.bad {
+  background: #fef2f2;
+  border-left-color: #dc2626;
+}
+
+.history-row.warn {
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+}
+
+.history-row.muted {
+  background: #f1f5f9;
+  border-left-color: #94a3b8;
+  opacity: 0.85;
+}
+
+.history-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+.history-row.good .history-icon {
+  color: #16a34a;
+}
+
+.history-row.bad .history-icon {
+  color: #dc2626;
+}
+
+.history-row.warn .history-icon {
+  color: #f59e0b;
+}
+
+.history-content {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.history-title {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.history-detail {
+  color: #334155;
+}
+
+.history-note {
+  color: #64748b;
+  font-style: italic;
+}
+
+.history-date {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
 .cma-chart {
   margin-bottom: 18px;
 }

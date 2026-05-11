@@ -84,6 +84,38 @@ class CmaResultOut(BaseModel):
     analogs: list[CmaAnalogOut]
 
 
+class ListingEventOut(BaseModel):
+    id: int
+    event_type: str
+    old_price_usd: Optional[float] = None
+    new_price_usd: Optional[float] = None
+    old_status: Optional[str] = None
+    new_status: Optional[str] = None
+    source: Optional[str] = None
+    source_id: Optional[str] = None
+    note: Optional[str] = None
+    at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ListingHistorySummary(BaseModel):
+    first_seen_at: Optional[datetime] = None
+    first_price_usd: Optional[float] = None
+    current_price_usd: Optional[float] = None
+    total_price_change_percent: Optional[float] = None
+    price_change_count: int = 0
+    relisted_count: int = 0
+    last_relisted_at: Optional[datetime] = None
+    last_delisted_at: Optional[datetime] = None
+
+
+class ListingHistoryOut(BaseModel):
+    listing_id: int
+    summary: ListingHistorySummary
+    events: list[ListingEventOut]
+
+
 class ScrapeRunRequest(BaseModel):
     source: str = "all"
     mode: str = "auto"

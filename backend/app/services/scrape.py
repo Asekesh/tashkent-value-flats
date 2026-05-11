@@ -11,7 +11,7 @@ from app.db.session import SessionLocal
 from app.models import Listing, ScrapeRun, ScrapeTask
 from app.scrapers.registry import ADAPTERS, get_adapter, parse_fixture
 from app.services import scrape_progress
-from app.services.listings import upsert_raw_listing
+from app.services.listings import mark_delisted_for_source, upsert_raw_listing
 from app.services.normalization import price_per_m2, to_usd
 
 
@@ -64,6 +64,8 @@ def run_scrape_for_source(db: Session, source: str, mode: str = "auto", trigger:
         run.status = "success"
         run.new_count = new_count
         run.updated_count = updated_count
+        if use_live and mode in {"full", "live"}:
+            mark_delisted_for_source(db, source)
     except Exception as exc:  # pragma: no cover - defensive run logging
         run.status = "failed"
         run.error = str(exc)

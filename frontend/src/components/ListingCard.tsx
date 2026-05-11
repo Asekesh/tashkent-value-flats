@@ -1,4 +1,4 @@
-import { BarChart3, Building2, Calendar, ExternalLink, Heart, MapPin, Ruler, TrendingDown, User } from "lucide-react";
+import { BarChart3, Building2, Calendar, ExternalLink, Heart, History, MapPin, Ruler, TrendingDown, User } from "lucide-react";
 import type { Listing } from "../types";
 import { bestPhoto, formatDate, isHotDeal, money, sellerLabel, sourceLabel } from "../utils";
 
@@ -10,6 +10,7 @@ export function ListingCard({
   onSelect,
   onToggleFavorite,
   onOpenCma,
+  onOpenHistory,
 }: {
   listing: Listing;
   rank?: number;
@@ -18,6 +19,7 @@ export function ListingCard({
   onSelect: (listing: Listing) => void;
   onToggleFavorite: (listing: Listing) => void;
   onOpenCma?: (listing: Listing) => void;
+  onOpenHistory?: (listing: Listing) => void;
 }) {
   const discount = listing.market?.discount_percent;
   const photo = bestPhoto(listing);
@@ -92,6 +94,20 @@ export function ListingCard({
               >
                 <BarChart3 size={14} />
                 Найти аналоги
+              </button>
+            )}
+            {onOpenHistory && (
+              <button
+                className="outline-link"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenHistory(listing);
+                }}
+                title="История объявления"
+              >
+                <History size={14} />
+                История
               </button>
             )}
             <a className="outline-link" href={listing.url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>

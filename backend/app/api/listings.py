@@ -11,8 +11,16 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.models import Listing
-from app.schemas.listing import CmaResultOut, ListingOut, ListingsPage, MarketEstimate
+from app.models import Listing, ListingEvent
+from app.schemas.listing import (
+    CmaResultOut,
+    ListingEventOut,
+    ListingHistoryOut,
+    ListingHistorySummary,
+    ListingOut,
+    ListingsPage,
+    MarketEstimate,
+)
 from app.services.cma import build_cma
 from app.services.listings import count_listings, listing_to_dict
 from app.services.market import estimate_market
@@ -170,6 +178,46 @@ def get_listing(listing_id: int, db: Session = Depends(get_db)) -> ListingOut:
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
     return _with_market(db, listing)
+
+
+@router.get("/listings/{listing_id}/history", response_model=ListingHistoryOut)
+def get_listing_history(listing_id: int, db: Session = Depends(get_db)) -> ListingHistoryOut:
+    listing = db.get(Listing, listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    events = list(
+        db.scalars(
+            select(ListingEvent).where(ListingEvent.listing_id == listing_id).order_by(asc(ListingEvent.at))
+        ).all()
+    )
+
+    first_seen = next((e for e in events if e.event_type == "first_seen"), None)
+    relists = [e for e in events if e.event_type == "relisted"]
+    delists = [e for e in events if e.event_type == "delisted"]
+    price_events = [e for e in events if e.event_type == "price_changed"]
+
+    first_price = first_seen.new_price_usd if first_seen else None
+    current_price = listing.price_usd
+    change_percent: Optional[float] = None
+    if first_price and first_price > 0 and current_price is not None:
+        change_percent = (current_price - first_price) / first_price * 100
+
+    summary = ListingHistorySummary(
+        first_seen_at=first_seen.at if first_seen else listing.created_at,
+        first_price_usd=first_price,
+        current_price_usd=current_price,
+        total_price_change_percent=change_percent,
+        price_change_count=len(price_events),
+        relisted_count=len(relists),
+        last_relisted_at=relists[-1].at if relists else None,
+        last_delisted_at=delists[-1].at if delists else None,
+    )
+
+    return ListingHistoryOut(
+        listing_id=listing_id,
+        summary=summary,
+        events=[ListingEventOut.model_validate(e) for e in reversed(events)],
+    )
 
 
 @router.get("/cma/{listing_id}", response_model=CmaResultOut)

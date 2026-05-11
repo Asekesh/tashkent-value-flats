@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { defaultFilters, fetchDashboardStats, fetchListings, fetchScrapeRuns, fetchScrapeSources, runScrape } from "./api";
 import { CmaModal } from "./components/CmaModal";
+import { HistoryModal } from "./components/HistoryModal";
 import { Sidebar, TopBar } from "./components/Shell";
 import { AdminPage } from "./pages/AdminPage";
 import { Dashboard } from "./pages/Dashboard";
@@ -23,6 +24,7 @@ export default function App() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [dashboardSource, setDashboardSource] = useState<string>("");
   const [cmaListing, setCmaListing] = useState<Listing | null>(null);
+  const [historyListing, setHistoryListing] = useState<Listing | null>(null);
 
   const districts = useMemo(() => Array.from(new Set(listings.map((item) => item.district).filter(Boolean))).sort(), [listings]);
 
@@ -133,6 +135,7 @@ export default function App() {
             onQuickFilter={applyQuickFilter}
             onSourceChange={changeDashboardSource}
             onOpenCma={setCmaListing}
+            onOpenHistory={setHistoryListing}
           />
         )}
         {view === "listings" && (
@@ -149,6 +152,7 @@ export default function App() {
             onSelect={setSelected}
             onToggleFavorite={toggleFavorite}
             onOpenCma={setCmaListing}
+            onOpenHistory={setHistoryListing}
           />
         )}
         {view === "admin" && (
@@ -163,6 +167,7 @@ export default function App() {
         )}
       </div>
       {cmaListing && <CmaModal listing={cmaListing} onClose={() => setCmaListing(null)} />}
+      {historyListing && <HistoryModal listing={historyListing} onClose={() => setHistoryListing(null)} />}
     </div>
   );
 }

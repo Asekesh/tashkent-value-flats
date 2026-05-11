@@ -16,6 +16,7 @@ export function ListingsPage({
   onSelect,
   onToggleFavorite,
   onOpenCma,
+  onOpenHistory,
 }: {
   listings: Listing[];
   total: number;
@@ -29,6 +30,7 @@ export function ListingsPage({
   onSelect: (listing: Listing) => void;
   onToggleFavorite: (listing: Listing) => void;
   onOpenCma?: (listing: Listing) => void;
+  onOpenHistory?: (listing: Listing) => void;
 }) {
   return (
     <div className="page">
@@ -53,6 +55,7 @@ export function ListingsPage({
               onSelect={onSelect}
               onToggleFavorite={onToggleFavorite}
               onOpenCma={onOpenCma}
+              onOpenHistory={onOpenHistory}
             />
           ))
         ) : (

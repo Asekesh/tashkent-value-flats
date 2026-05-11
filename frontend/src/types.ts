@@ -116,6 +116,36 @@ export type CmaStats = {
   avg_price_usd: number | null;
 };
 
+export type ListingEvent = {
+  id: number;
+  event_type: "first_seen" | "price_changed" | "relisted" | "delisted" | "status_changed";
+  old_price_usd: number | null;
+  new_price_usd: number | null;
+  old_status: string | null;
+  new_status: string | null;
+  source: string | null;
+  source_id: string | null;
+  note: string | null;
+  at: string;
+};
+
+export type ListingHistorySummary = {
+  first_seen_at: string | null;
+  first_price_usd: number | null;
+  current_price_usd: number | null;
+  total_price_change_percent: number | null;
+  price_change_count: number;
+  relisted_count: number;
+  last_relisted_at: string | null;
+  last_delisted_at: string | null;
+};
+
+export type ListingHistory = {
+  listing_id: number;
+  summary: ListingHistorySummary;
+  events: ListingEvent[];
+};
+
 export type CmaResult = {
   subject: CmaAnalog;
   basis: "building" | "district";
