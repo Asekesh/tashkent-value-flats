@@ -130,10 +130,13 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
     new_yesterday_hot = 0
     sources_total: dict[str, int] = defaultdict(int)
     sources_hot: dict[str, int] = defaultdict(int)
+    districts_set: set[str] = set()
 
     for row in rows:
         total += 1
         sources_total[row.source] += 1
+        if row.district:
+            districts_set.add(row.district)
         estimate = estimate_from_index(
             index,
             building_key=row.building_key,
@@ -166,6 +169,7 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
         "new_today": new_today_hot,
         "new_yesterday": new_yesterday_hot,
         "sources": sources,
+        "districts": sorted(districts_set),
         "hot_threshold_percent": threshold,
     }
 

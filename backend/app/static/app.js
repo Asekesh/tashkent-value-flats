@@ -256,7 +256,8 @@ function formatNumber(value) {
 
 function formatDateTime(value) {
   if (!value) return "—";
-  const date = new Date(value);
+  const normalized = typeof value === "string" && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? `${value}Z` : value;
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "—";
   const d = String(date.getDate()).padStart(2, "0");
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -319,6 +320,7 @@ async function fetchDashboardStats() {
     if (!response.ok) return;
     state.stats = await response.json();
     renderStats();
+    renderDistrictOptions();
   } catch {
     // оставляем прежние значения
   }
@@ -465,7 +467,9 @@ function renderSourceStats() {
 function renderDistrictOptions() {
   const select = document.querySelector("#district");
   const current = select.value;
-  const districts = [...new Set(state.listings.map((item) => item.district).filter(Boolean))].sort();
+  const fromStats = state.stats?.districts ?? [];
+  const fromListings = state.listings.map((item) => item.district).filter(Boolean);
+  const districts = [...new Set([...fromStats, ...fromListings])].sort();
   select.innerHTML = `<option value="">Все районы</option>${districts.map((district) => `<option value="${escapeAttr(district)}">${escapeHtml(district)}</option>`).join("")}`;
   select.value = districts.includes(current) ? current : "";
 }
@@ -762,7 +766,8 @@ function money(value) {
 
 function formatDate(value) {
   if (!value) return "нет даты";
-  const date = new Date(value);
+  const normalized = typeof value === "string" && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? `${value}Z` : value;
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return "нет даты";
   const diffHours = (Date.now() - date.getTime()) / 3_600_000;
   if (diffHours < 1) return "только что";
