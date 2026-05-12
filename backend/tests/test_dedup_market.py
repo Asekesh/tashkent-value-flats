@@ -45,6 +45,23 @@ def test_market_estimate_prefers_building_and_flags_15_percent_discount(db_sessi
     for source in ["olx", "uybor", "realt24"]:
         for raw in parse_fixture(source):
             upsert_raw_listing(db_session, raw)
+    # Дополняем выборку до минимально допустимой для building-basis (5 шт).
+    for idx, (price, area) in enumerate([(90_500, 57), (89_000, 56.5), (90_000, 57.5)]):
+        upsert_raw_listing(
+            db_session,
+            RawListing(
+                source="test",
+                source_id=f"extra-{idx}",
+                url=f"https://test.local/extra-{idx}",
+                title="Extra Паркент 2-комн",
+                price=price,
+                currency="USD",
+                area_m2=area,
+                rooms=2,
+                district="Мирзо-Улугбекский район",
+                address_raw="Паркентский, дом 18",
+            ),
+        )
     db_session.commit()
 
     building_key = normalize_building_key("Мирзо-Улугбекский район", "Паркентский, дом 18")
@@ -58,8 +75,8 @@ def test_market_estimate_prefers_building_and_flags_15_percent_discount(db_sessi
     )
 
     assert estimate.basis == "building"
-    assert estimate.confidence == "high"
-    assert estimate.sample_size >= 3
+    assert estimate.sample_size >= 5
+    assert estimate.discount_percent is not None
     assert estimate.discount_percent >= 15
     assert estimate.is_below_market is True
 

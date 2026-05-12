@@ -11,6 +11,23 @@ from app.core.config import get_settings
 from app.models import Listing
 
 
+# Sanity-check для рынка $/м² в Ташкенте. Реальный диапазон ~$500-1500/м²;
+# границы расширены, но любая «средняя» вне этого окна — мусорные данные
+# (опечатки, фейки, перепутанная валюта/площадь).
+MARKET_PRICE_MIN_USD_PER_M2 = 400.0
+MARKET_PRICE_MAX_USD_PER_M2 = 3000.0
+
+# Дисконт > 50% — почти всегда либо битое объявление, либо битый рынок.
+# Скрываем, чтобы не показывать пользователю фейковые «-97%».
+MAX_REALISTIC_DISCOUNT_PERCENT = 50.0
+
+# Минимальные выборки. Building+rooms строже: при <5 одно бракованное
+# объявление перетягивает медиану и даёт фейковый «дисконт». Район
+# усредняет по сотням объявлений — можно мягче.
+MIN_BUILDING_ROOM_SAMPLES = 5
+MIN_DISTRICT_ROOM_SAMPLES = 3
+
+
 @dataclass
 class Estimate:
     market_price_per_m2_usd: float | None
@@ -24,14 +41,29 @@ class Estimate:
 
 @dataclass
 class MarketIndex:
-    """Предрассчитанные средние/медианы по всей активной базе.
+    """Предрассчитанные медианы по активной базе.
 
     Используется и `/listings`, и `/listings/stats`, чтобы числа на дашборде и
     в списке считались по одной формуле.
     """
 
-    building: dict[str, tuple[float, int]] = field(default_factory=dict)
+    building_rooms: dict[tuple[str, int], tuple[float, int]] = field(default_factory=dict)
     district_rooms: dict[tuple[str, int], tuple[float, int]] = field(default_factory=dict)
+
+
+def _robust_price(values: list[float], min_samples: int) -> float | None:
+    """Trimmed median с sanity-check. Возвращает None если данных мало
+    или результат выпал из разумных границ для Ташкента."""
+    if len(values) < min_samples:
+        return None
+    sorted_vals = sorted(values)
+    if len(sorted_vals) >= 10:
+        trim = len(sorted_vals) // 10
+        sorted_vals = sorted_vals[trim : len(sorted_vals) - trim]
+    price = float(median(sorted_vals))
+    if not (MARKET_PRICE_MIN_USD_PER_M2 <= price <= MARKET_PRICE_MAX_USD_PER_M2):
+        return None
+    return price
 
 
 def build_market_index(db: Session) -> MarketIndex:
@@ -48,25 +80,34 @@ def build_market_index(db: Session) -> MarketIndex:
             Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
         )
     ).all()
-    building_groups: dict[str, list[float]] = defaultdict(list)
+    building_room_groups: dict[tuple[str, int], list[float]] = defaultdict(list)
     district_room_groups: dict[tuple[str, int], list[float]] = defaultdict(list)
     for row in rows:
-        if row.price_per_m2_usd is None:
+        if row.price_per_m2_usd is None or row.rooms is None:
+            continue
+        # Отсекаем выбросы на уровне сырых данных, чтобы они даже не попадали
+        # в выборку для медианы. $32k/м² в одном объявлении — это либо опечатка,
+        # либо стартовая цена для торга, не рынок.
+        if not (MARKET_PRICE_MIN_USD_PER_M2 <= row.price_per_m2_usd <= MARKET_PRICE_MAX_USD_PER_M2):
             continue
         if row.building_key:
-            building_groups[row.building_key].append(row.price_per_m2_usd)
-        district_room_groups[(row.district, row.rooms)].append(row.price_per_m2_usd)
-    building = {
-        key: (sum(values) / len(values), len(values))
-        for key, values in building_groups.items()
-        if len(values) >= 2
-    }
-    district_rooms = {
-        key: (float(median(values)), len(values))
-        for key, values in district_room_groups.items()
-        if len(values) >= 3
-    }
-    return MarketIndex(building=building, district_rooms=district_rooms)
+            building_room_groups[(row.building_key, row.rooms)].append(row.price_per_m2_usd)
+        if row.district:
+            district_room_groups[(row.district, row.rooms)].append(row.price_per_m2_usd)
+
+    building_rooms: dict[tuple[str, int], tuple[float, int]] = {}
+    for key, values in building_room_groups.items():
+        price = _robust_price(values, MIN_BUILDING_ROOM_SAMPLES)
+        if price is not None:
+            building_rooms[key] = (price, len(values))
+
+    district_rooms: dict[tuple[str, int], tuple[float, int]] = {}
+    for key, values in district_room_groups.items():
+        price = _robust_price(values, MIN_DISTRICT_ROOM_SAMPLES)
+        if price is not None:
+            district_rooms[key] = (price, len(values))
+
+    return MarketIndex(building_rooms=building_rooms, district_rooms=district_rooms)
 
 
 def estimate_from_index(
@@ -83,28 +124,34 @@ def estimate_from_index(
     basis = "insufficient_data"
     confidence = "low"
 
-    if building_key and building_key in index.building:
-        avg, count = index.building[building_key]
-        market_price = round(avg, 2)
+    if building_key and (building_key, rooms) in index.building_rooms:
+        price, count = index.building_rooms[(building_key, rooms)]
+        market_price = round(price, 2)
         sample_size = count
         basis = "building"
-        confidence = "high"
+        confidence = "high" if count >= 10 else "medium"
     elif (district, rooms) in index.district_rooms:
-        med, count = index.district_rooms[(district, rooms)]
-        market_price = round(med, 2)
+        price, count = index.district_rooms[(district, rooms)]
+        market_price = round(price, 2)
         sample_size = count
         basis = "district_rooms"
-        confidence = "medium" if count >= 5 else "low"
+        confidence = "medium" if count >= 10 else "low"
 
     discount: float | None = None
     savings: float | None = None
     is_below = False
     if market_price and listing_price_per_m2 and market_price > 0:
-        discount = round((1 - listing_price_per_m2 / market_price) * 100, 2)
-        threshold = get_settings().below_market_threshold * 100
-        is_below = discount >= threshold
-        if area_m2:
-            savings = round((market_price - listing_price_per_m2) * area_m2, 2)
+        raw_discount = (1 - listing_price_per_m2 / market_price) * 100
+        if raw_discount > MAX_REALISTIC_DISCOUNT_PERCENT:
+            # Скам / опечатка / перепутанные единицы — не показываем
+            # фейковый дисконт, объявление просто не попадёт в «горячие».
+            discount = None
+        else:
+            discount = round(raw_discount, 2)
+            threshold = get_settings().below_market_threshold * 100
+            is_below = discount >= threshold
+            if area_m2:
+                savings = round((market_price - listing_price_per_m2) * area_m2, 2)
 
     return Estimate(
         market_price_per_m2_usd=market_price,

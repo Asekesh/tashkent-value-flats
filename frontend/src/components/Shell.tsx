@@ -58,7 +58,8 @@ export function TopBar({
   return (
     <header className="topbar">
       <div>
-        <h1>Рабочая панель цен ниже рынка</h1>
+        <h1>Квартиры в Ташкенте ниже рынка</h1>
+        <p className="topbar-sub">Обновляется каждые 15 минут · только проверенные дисконты</p>
       </div>
       <div className="topbar-actions">
         <span className={loading ? "status loading" : "status"}>{status}</span>

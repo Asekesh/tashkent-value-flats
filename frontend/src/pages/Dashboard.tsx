@@ -54,7 +54,7 @@ export function Dashboard({
       <div className="page-heading">
         <div>
           <h2>Лучшие по цене за м²</h2>
-          <p>Квартиры со скидкой 15–99% от средней цены ЖК · самая низкая цена за м² в каждом ЖК</p>
+          <p>Квартиры со скидкой 15–50% от медианы по ЖК · подозрительные выбросы отфильтрованы</p>
         </div>
         <button className="ghost-button" onClick={onViewListings} type="button">
           Все объявления
