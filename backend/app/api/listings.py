@@ -28,6 +28,7 @@ from app.services.market import (
     estimate_from_index,
     estimate_market,
 )
+from app.services.segmentation import classify_segment
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -112,6 +113,11 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
             Listing.price_per_m2_usd,
             Listing.area_m2,
             Listing.created_at,
+            Listing.title,
+            Listing.address_raw,
+            Listing.description,
+            Listing.floor,
+            Listing.total_floors,
         ).where(
             Listing.status == "active",
             Listing.price_usd >= settings.min_listing_price_usd,
@@ -137,6 +143,7 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
         sources_total[row.source] += 1
         if row.district:
             districts_set.add(row.district)
+        segment = classify_segment(row.title, row.address_raw, row.description)
         estimate = estimate_from_index(
             index,
             building_key=row.building_key,
@@ -144,6 +151,9 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
             rooms=row.rooms,
             area_m2=row.area_m2,
             listing_price_per_m2=row.price_per_m2_usd,
+            segment=segment,
+            floor=row.floor,
+            total_floors=row.total_floors,
         )
         if estimate.discount_percent is None or estimate.discount_percent < threshold:
             continue
@@ -246,6 +256,9 @@ def get_market_estimate(
     area_m2: float,
     building_key: Optional[str] = None,
     listing_price_per_m2: Optional[float] = None,
+    segment: Optional[Literal["new", "secondary"]] = None,
+    floor: Optional[int] = None,
+    total_floors: Optional[int] = None,
     db: Session = Depends(get_db),
 ) -> MarketEstimate:
     estimate = estimate_market(
@@ -255,11 +268,15 @@ def get_market_estimate(
         area_m2=area_m2,
         building_key=building_key,
         listing_price_per_m2=listing_price_per_m2,
+        segment=segment,
+        floor=floor,
+        total_floors=total_floors,
     )
     return MarketEstimate(**estimate.__dict__)
 
 
 def _build_item(listing: Listing, index: MarketIndex) -> ListingOut:
+    segment = classify_segment(listing.title, listing.address_raw, listing.description)
     estimate = estimate_from_index(
         index,
         building_key=listing.building_key,
@@ -267,6 +284,9 @@ def _build_item(listing: Listing, index: MarketIndex) -> ListingOut:
         rooms=listing.rooms,
         area_m2=listing.area_m2,
         listing_price_per_m2=listing.price_per_m2_usd,
+        segment=segment,
+        floor=listing.floor,
+        total_floors=listing.total_floors,
     )
     data = listing_to_dict(listing)
     data["market"] = MarketEstimate(**estimate.__dict__)
