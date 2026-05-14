@@ -206,15 +206,21 @@ def _run_live_scan(
     new_count = 0
     updated_count = 0
 
+    page_index = 0
     for page_listings in adapter.fetch_live_pages(max_pages=page_limit, delay_seconds=delay_seconds):
+        page_index += 1
         page_new = 0
         page_updated = 0
         page_found = len(page_listings)
+        raw_with_photos = sum(1 for raw in page_listings if raw.photos)
+        last_upserted_id = None
         for raw in page_listings:
             if not _is_plausible_listing(raw, min_price_usd, min_price_per_m2_usd):
                 continue
             known_before = _is_known_listing(db, raw.source, raw.source_id)
-            _, is_new = upsert_raw_listing(db, raw)
+            listing, is_new = upsert_raw_listing(db, raw)
+            if raw.photos:
+                last_upserted_id = listing.id
             if is_new:
                 new_count += 1
                 page_new += 1
@@ -224,6 +230,15 @@ def _run_live_scan(
                 if known_before:
                     known_total += 1
         db.commit()
+        persisted = None
+        if last_upserted_id is not None:
+            persisted = db.scalar(select(Listing.photos).where(Listing.id == last_upserted_id))
+        print(
+            f"[scrape-debug] {adapter.source} page={page_index} "
+            f"found={page_found} raw_with_photos={raw_with_photos} "
+            f"sample_listing={last_upserted_id} persisted_photos={persisted!r}",
+            flush=True,
+        )
         scrape_progress.increment(pages=1, found=page_found, new=page_new, updated=page_updated)
         _sync_task_from_progress(db)
         if scrape_progress.is_stop_requested():
