@@ -482,7 +482,7 @@ function listingCard(listing, rank) {
   const favorite = state.favorites.includes(listing.id) ? " active" : "";
   return `
     <article class="listing-card${selected}" data-id="${listing.id}">
-      <div class="listing-media">${photo ? `<img src="${escapeAttr(photo)}" alt="${escapeAttr(listing.title)}" />` : "▦"}</div>
+      <div class="listing-media">${photo ? `<img src="${escapeAttr(photo)}" alt="${escapeAttr(listing.title)}" loading="lazy" />` : "▦"}</div>
       <div class="listing-body">
         <div class="chips">
           <span class="rank">${rank}</span>
@@ -532,6 +532,20 @@ function bindCards(root) {
       event.stopPropagation();
       openCma(Number(button.dataset.cma));
     });
+  });
+  // Hotlinked photos from the source platforms can 403/404 (hotlink
+  // protection, expired URLs) — degrade gracefully to the ▦ placeholder
+  // instead of leaving a blank/broken image.
+  root.querySelectorAll(".listing-media img").forEach((img) => {
+    const fallback = () => {
+      const media = img.closest(".listing-media");
+      if (media) media.textContent = "▦";
+    };
+    if (img.complete && img.naturalWidth === 0) {
+      fallback();
+    } else {
+      img.addEventListener("error", fallback, { once: true });
+    }
   });
 }
 
