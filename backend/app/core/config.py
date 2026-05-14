@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # every N meaningful actions (filter / sort / open card).
     reg_gate_prompt_every: int = 3
 
+    # --- Legal pages (Step 7) ---
+    # Contact for listing-removal requests; shown on /removal when set.
+    legal_contact_email: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

@@ -14,6 +14,7 @@ from app.admin.router import router as admin_panel_router
 from app.api import admin, listings, onboarding
 from app.auth.router import router as auth_router
 from app.core.config import get_settings
+from app.legal.router import router as legal_router
 from app.db.session import Base, SessionLocal, engine
 from app.models import Listing  # noqa: F401
 from app.scrapers.registry import ADAPTERS, parse_fixture
@@ -103,3 +104,4 @@ app.include_router(admin.router)
 app.include_router(onboarding.router)
 app.include_router(auth_router)
 app.include_router(admin_panel_router)
+app.include_router(legal_router)

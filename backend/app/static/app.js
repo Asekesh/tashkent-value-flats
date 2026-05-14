@@ -432,8 +432,9 @@ function renderInsight() {
       <dt>Рынок за м²</dt><dd>${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}` : "мало данных"}</dd>
       <dt>Дисконт</dt><dd>${listing.market?.discount_percent != null ? `${listing.market.discount_percent.toFixed(1)}%` : "нет"}</dd>
       <dt>Дубли</dt><dd>${listing.duplicate_count}</dd>
+      <dt>Источник</dt><dd>${escapeHtml(sourceLabel(listing.source))}</dd>
     </dl>
-    <a class="primary-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">Открыть источник</a>
+    <a class="primary-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">Смотреть оригинал</a>
   `;
 }
 
@@ -487,7 +488,7 @@ function listingCard(listing, rank) {
           <span class="rank">${rank}</span>
           ${isHotDeal(listing) ? `<span class="chip danger">-${discount.toFixed(1)}%</span>` : ""}
           <span class="chip">${listing.rooms}-комн.</span>
-          <span class="chip muted">${escapeHtml(listing.source.toUpperCase())}</span>
+          <span class="chip muted">Источник: ${escapeHtml(sourceLabel(listing.source))}</span>
           ${listing.seller_type ? `<span class="chip muted">${escapeHtml(sellerLabel(listing.seller_type))}</span>` : ""}
         </div>
         <h3>${escapeHtml(listing.title)}</h3>
@@ -503,7 +504,7 @@ function listingCard(listing, rank) {
           <div class="row-actions">
             <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">♡</button>
             <button class="outline-link" data-cma="${listing.id}" title="Сравнительный анализ" type="button">▤ Найти аналоги</button>
-            <a class="outline-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">↗ Источник</a>
+            <a class="outline-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">↗ Смотреть оригинал</a>
           </div>
         </div>
       </div>

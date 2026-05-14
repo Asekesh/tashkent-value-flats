@@ -1586,3 +1586,36 @@ a.nav-item {
 .reg-primary:hover {
   background: #1d4ed8;
 }
+
+/* Site footer — legal links + attribution line (Step 7) */
+.site-footer {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 28px;
+  padding: 22px 4px 8px;
+  text-align: center;
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.site-footer nav a {
+  color: #2563eb;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.site-footer nav a:hover {
+  text-decoration: underline;
+}
+
+.site-footer p {
+  color: #94a3b8;
+  font-size: 12px;
+  margin: 0 auto;
+  max-width: 640px;
+}
