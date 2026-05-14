@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, resolve_user_plan
 from app.auth.security import create_session_token, verify_telegram_auth
+from app.core.plans import get_limits_for_plan
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import User
@@ -68,9 +69,14 @@ def auth_config() -> dict:
 
 
 @router.get("/me")
-def me(user: Optional[User] = Depends(get_current_user)) -> dict:
+def me(
+    user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    plan = resolve_user_plan(db, user)
+    base = {"plan": plan, "limits": get_limits_for_plan(plan)}
     if user is None:
-        return {"authenticated": False}
+        return {"authenticated": False, **base}
     return {
         "authenticated": True,
         "id": user.id,
@@ -81,4 +87,15 @@ def me(user: Optional[User] = Depends(get_current_user)) -> dict:
         "photo_url": user.photo_url,
         "role": user.role,
         "account_type": user.account_type,
+        **base,
     }
+
+
+@router.get("/limits")
+def limits(
+    user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Tariff limits for the current user — 'what is this user allowed to do'."""
+    plan = resolve_user_plan(db, user)
+    return {"plan": plan, "limits": get_limits_for_plan(plan)}

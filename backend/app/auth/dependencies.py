@@ -5,15 +5,18 @@ returns `None` instead of raising when there is no valid cookie.
 """
 from __future__ import annotations
 
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.security import decode_session_token
 from app.core.config import get_settings
+from app.core.plans import DEFAULT_PLAN, get_limits_for_plan
 from app.db.session import get_db
-from app.models import User
+from app.models import Subscription, User
 
 
 def get_current_user(
@@ -46,3 +49,30 @@ def require_admin(user: Optional[User] = Depends(get_current_user)) -> User:
 def get_account_type(user: User) -> str:
     """Account type of a user. Extension point for future plan logic."""
     return user.account_type
+
+
+def resolve_user_plan(db: Session, user: Optional[User]) -> str:
+    """Plan of the user's active, non-expired subscription, else 'free'.
+
+    Anonymous users and users without a subscription are treated as free.
+    """
+    if user is None:
+        return DEFAULT_PLAN
+    subscription = db.scalar(
+        select(Subscription)
+        .where(Subscription.user_id == user.id, Subscription.status == "active")
+        .order_by(Subscription.created_at.desc())
+    )
+    if subscription is None:
+        return DEFAULT_PLAN
+    if subscription.expires_at is not None and subscription.expires_at < datetime.utcnow():
+        return DEFAULT_PLAN
+    return subscription.plan
+
+
+def get_plan_limits(
+    user: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Tariff limits for the current user. Usable as a FastAPI dependency."""
+    return get_limits_for_plan(resolve_user_plan(db, user))
