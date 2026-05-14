@@ -70,6 +70,7 @@ class OlxAdapter(SourceAdapter):
 
     def parse_live_page(self, html: str) -> list[RawListing]:
         soup = BeautifulSoup(html, "html.parser")
+        photo_map = _extract_prerendered_photos(html)
         listings: list[RawListing] = []
         seen: set[str] = set()
         for offer in _extract_jsonld_offers(soup):
@@ -82,7 +83,46 @@ class OlxAdapter(SourceAdapter):
             if raw and raw.source_id not in seen:
                 listings.append(raw)
                 seen.add(raw.source_id)
+        for raw in listings:
+            if not raw.photos:
+                raw.photos = photo_map.get(raw.source_id) or photo_map.get(
+                    _source_id_from_url(raw.url)
+                ) or []
         return listings
+
+
+def _extract_prerendered_photos(html: str) -> dict[str, list[str]]:
+    """Photos by id/url-code from OLX's ``window.__PRERENDERED_STATE__`` blob.
+
+    Card thumbnails on pages past the first are server-rendered as a
+    ``no_thumbnail`` placeholder and only hydrated client-side, so the photos
+    have to come from the embedded state instead.
+    """
+    match = re.search(
+        r"window\.__PRERENDERED_STATE__\s*=\s*(\"(?:[^\"\\]|\\.)*\")", html
+    )
+    if not match:
+        return {}
+    try:
+        data = json.loads(json.loads(match.group(1)))
+    except (json.JSONDecodeError, ValueError):
+        return {}
+    ads = data.get("listing", {}).get("listing", {}).get("ads")
+    if not isinstance(ads, list):
+        return {}
+    photo_map: dict[str, list[str]] = {}
+    for ad in ads:
+        if not isinstance(ad, dict):
+            continue
+        photos = [str(p) for p in ad.get("photos") or [] if p][:5]
+        if not photos:
+            continue
+        if ad.get("id") is not None:
+            photo_map[str(ad["id"])] = photos
+        url = compact_text(ad.get("url"))
+        if url:
+            photo_map[_source_id_from_url(url)] = photos
+    return photo_map
 
 
 def _extract_jsonld_offers(soup: BeautifulSoup) -> list[dict]:
