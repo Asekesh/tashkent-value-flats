@@ -1419,3 +1419,37 @@ select:focus {
   display: none;
 }
 
+
+/* Telegram login widget */
+.auth-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+}
+.auth-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.auth-user img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.auth-logout {
+  font-size: 13px;
+  color: #64748b;
+  text-decoration: none;
+}
+.auth-logout:hover {
+  color: #0f172a;
+  text-decoration: underline;
+}
+.auth-hint {
+  font-size: 12px;
+  color: #94a3b8;
+}

@@ -23,11 +23,29 @@ class Settings(BaseSettings):
     min_listing_price_per_m2_usd: float = 100.0
     below_market_threshold: float = 0.15
 
+    # --- Auth (Telegram login + JWT session) ---
+    telegram_bot_token: str = ""
+    telegram_bot_username: str = ""
+    jwt_secret: str = "dev-insecure-secret-change-me"
+    jwt_ttl_hours: int = 720
+    jwt_cookie_name: str = "tvf_session"
+    cookie_secure: bool = True
+    admin_telegram_ids: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def admin_telegram_id_set(self) -> set[int]:
+        ids: set[int] = set()
+        for chunk in self.admin_telegram_ids.split(","):
+            chunk = chunk.strip()
+            if chunk.isdigit():
+                ids.add(int(chunk))
+        return ids
 
     @property
     def scheduled_source_list(self) -> list[str]:

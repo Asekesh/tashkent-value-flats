@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, inspect, select, func, text
 
 from app.api import admin, listings
+from app.auth.router import router as auth_router
 from app.core.config import get_settings
 from app.db.session import Base, SessionLocal, engine
 from app.models import Listing  # noqa: F401
@@ -98,3 +99,4 @@ def health() -> dict[str, str]:
 
 app.include_router(listings.router)
 app.include_router(admin.router)
+app.include_router(auth_router)

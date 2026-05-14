@@ -36,6 +36,7 @@
           </div>
           <div class="topbar-actions">
             <span id="status" class="status">Готово</span>
+            <div id="authBox" class="auth-box"></div>
           </div>
         </header>
 
@@ -189,5 +190,39 @@
     </main>
     <button id="scrollTopButton" class="scroll-top" type="button" aria-label="Наверх" hidden>↑</button>
     <script src="/static/app.js?v=20260512-tz-districts"></script>
+    <script>
+      // Telegram login widget — isolated from app.js, public pages stay open.
+      (async function () {
+        var box = document.getElementById("authBox");
+        if (!box) return;
+        try {
+          var me = await fetch("/auth/me", { credentials: "same-origin" }).then(function (r) { return r.json(); });
+          if (me && me.authenticated) {
+            var name = me.first_name || me.username || ("id" + me.telegram_id);
+            box.innerHTML =
+              '<span class="auth-user">' +
+              (me.photo_url ? '<img src="' + me.photo_url + '" alt="" />' : "") +
+              "<span>" + name + (me.role === "admin" ? " · админ" : "") + "</span></span>" +
+              '<a class="auth-logout" href="/auth/logout">Выйти</a>';
+            return;
+          }
+          var cfg = await fetch("/auth/config").then(function (r) { return r.json(); });
+          if (!cfg || !cfg.bot_username) {
+            box.innerHTML = '<span class="auth-hint">Вход не настроен</span>';
+            return;
+          }
+          var s = document.createElement("script");
+          s.async = true;
+          s.src = "https://telegram.org/js/telegram-widget.js?22";
+          s.setAttribute("data-telegram-login", cfg.bot_username);
+          s.setAttribute("data-size", "medium");
+          s.setAttribute("data-auth-url", "/auth/telegram/callback");
+          s.setAttribute("data-request-access", "write");
+          box.appendChild(s);
+        } catch (e) {
+          /* public site keeps working even if auth endpoints fail */
+        }
+      })();
+    </script>
   </body>
 </html>
