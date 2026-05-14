@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ташкент Недвижимость</title>
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260514-legal" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260514-onboarding2" />
   </head>
   <body>
     <main class="app-shell">
@@ -37,6 +37,7 @@
           </div>
           <div class="topbar-actions">
             <span id="status" class="status">Готово</span>
+            <button id="onboardingHelp" class="icon-button" type="button" aria-label="Как работает сервис" title="Как работает сервис">?</button>
             <div id="authBox" class="auth-box"></div>
           </div>
         </header>
@@ -105,6 +106,12 @@
               <div id="dashboardList" class="deal-list"></div>
             </div>
             <aside id="insightPanel" class="insight-panel"></aside>
+          </section>
+
+          <section class="how-it-works">
+            <div class="section-title">✦ <span>Как это работает</span></div>
+            <p>Коротко о том, что умеет сервис — кнопка «?» в шапке откроет это окно снова.</p>
+            <ul id="howItWorksGrid" class="how-grid"></ul>
           </section>
         </section>
 
@@ -200,9 +207,9 @@
     </main>
     <button id="scrollTopButton" class="scroll-top" type="button" aria-label="Наверх" hidden>↑</button>
     <script src="/static/app.js?v=20260514-photo-fallback"></script>
-    <script src="/static/service-features.js?v=20260514-reg-gate"></script>
+    <script src="/static/service-features.js?v=20260514-onboarding2"></script>
     <script src="/static/reg-gate.js?v=20260514-reg-gate"></script>
-    <script src="/static/onboarding.js?v=20260514-onboarding"></script>
+    <script src="/static/onboarding.js?v=20260514-onboarding2"></script>
     <script>
       // Telegram login widget — isolated from app.js, public pages stay open.
       (async function () {

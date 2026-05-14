@@ -1587,6 +1587,87 @@ a.nav-item {
   background: #1d4ed8;
 }
 
+/* Onboarding welcome window — wider modal, 2-column feature grid */
+.onb-modal {
+  max-width: 600px;
+}
+
+.onb-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.onb-grid li {
+  align-content: start;
+}
+
+.onb-ic {
+  align-items: center;
+  background: #eff6ff;
+  border-radius: 7px;
+  color: #2563eb;
+  display: inline-flex;
+  font-size: 14px;
+  height: 26px;
+  justify-content: center;
+  margin-bottom: 4px;
+  width: 26px;
+}
+
+.onb-modal .reg-later {
+  margin-top: 8px;
+}
+
+/* Permanent "Как это работает" block on the dashboard */
+.how-it-works {
+  margin-top: 24px;
+}
+
+.how-it-works > p {
+  color: #64748b;
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.how-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.how-grid li {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+}
+
+.how-grid b {
+  font-size: 13px;
+}
+
+.how-grid span:not(.onb-ic) {
+  color: #64748b;
+  font-size: 12px;
+}
+
+@media (max-width: 880px) {
+  .how-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .onb-grid,
+  .how-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Site footer — legal links + attribution line (Step 7) */
 .site-footer {
   border-top: 1px solid #e2e8f0;
