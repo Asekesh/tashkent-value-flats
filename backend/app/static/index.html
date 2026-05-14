@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ташкент Недвижимость</title>
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260512-tz-districts" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260514-admin-nav" />
   </head>
   <body>
     <main class="app-shell">
@@ -22,6 +22,7 @@
           <button class="nav-item active" data-view-button="dashboard" type="button"><span>⌂</span><span><strong>Главная</strong><small>лучшие сделки</small></span></button>
           <button class="nav-item" data-view-button="listings" type="button"><span>▦</span><span><strong>Объявления</strong><small>поиск и фильтры</small></span></button>
           <button class="nav-item" data-view-button="admin" type="button"><span>⚙</span><span><strong>Управление</strong><small>сбор данных</small></span></button>
+          <a id="adminPanelLink" class="nav-item" href="/admin" hidden><span>◆</span><span><strong>Админ-панель</strong><small>пользователи и метрики</small></span></a>
         </nav>
         <div class="sidebar-foot">
           <span>▧</span>
@@ -198,6 +199,10 @@
         try {
           var me = await fetch("/auth/me", { credentials: "same-origin" }).then(function (r) { return r.json(); });
           if (me && me.authenticated) {
+            if (me.role === "admin") {
+              var adminLink = document.getElementById("adminPanelLink");
+              if (adminLink) adminLink.hidden = false;
+            }
             var name = me.first_name || me.username || ("id" + me.telegram_id);
             box.innerHTML =
               '<span class="auth-user">' +
