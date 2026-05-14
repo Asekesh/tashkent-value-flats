@@ -26,5 +26,8 @@ class User(Base):
         ACCOUNT_TYPE_ENUM, default="individual", server_default="individual", index=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    has_seen_onboarding: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

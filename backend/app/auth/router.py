@@ -91,6 +91,7 @@ def me(
         "photo_url": user.photo_url,
         "role": user.role,
         "account_type": user.account_type,
+        "has_seen_onboarding": user.has_seen_onboarding,
         **base,
     }
 

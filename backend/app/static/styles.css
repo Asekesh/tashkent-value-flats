@@ -1569,3 +1569,20 @@ a.nav-item {
 .reg-later:hover {
   color: #0f172a;
 }
+
+.reg-primary {
+  background: #2563eb;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 16px;
+  width: 100%;
+}
+
+.reg-primary:hover {
+  background: #1d4ed8;
+}
