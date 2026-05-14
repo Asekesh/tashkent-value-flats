@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ташкент Недвижимость</title>
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260514-onboarding2" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260514-favorites" />
   </head>
   <body>
     <main class="app-shell">
@@ -21,6 +21,7 @@
           <p>Навигация</p>
           <button class="nav-item active" data-view-button="dashboard" type="button"><span>⌂</span><span><strong>Главная</strong><small>лучшие сделки</small></span></button>
           <button class="nav-item" data-view-button="listings" type="button"><span>▦</span><span><strong>Объявления</strong><small>поиск и фильтры</small></span></button>
+          <button class="nav-item" data-view-button="favorites" type="button"><span>♥</span><span><strong>Избранное</strong><small>сохранённые объекты</small></span><span id="favoritesBadge" class="nav-badge" hidden>0</span></button>
           <button id="scrapeAdminNav" class="nav-item" data-view-button="admin" type="button" hidden><span>⚙</span><span><strong>Управление</strong><small>сбор данных</small></span></button>
           <a id="adminPanelLink" class="nav-item" href="/admin" hidden><span>◆</span><span><strong>Админ-панель</strong><small>пользователи и метрики</small></span></a>
         </nav>
@@ -145,6 +146,17 @@
           <div id="listingsPagination" class="pagination"></div>
         </section>
 
+        <section id="favoritesView" class="view page">
+          <div class="page-heading">
+            <div>
+              <h2>Избранное</h2>
+              <p><span id="favoritesTotal">0</span> сохранённых объектов. Список хранится в этом браузере.</p>
+            </div>
+            <button class="ghost-button" data-open-listings type="button">К объявлениям →</button>
+          </div>
+          <section id="favoritesList" class="deal-list"></section>
+        </section>
+
         <section id="adminView" class="view page">
           <div class="page-heading">
             <div>
@@ -206,7 +218,7 @@
       </div>
     </main>
     <button id="scrollTopButton" class="scroll-top" type="button" aria-label="Наверх" hidden>↑</button>
-    <script src="/static/app.js?v=20260514-history"></script>
+    <script src="/static/app.js?v=20260514-favorites"></script>
     <script src="/static/service-features.js?v=20260514-history"></script>
     <script src="/static/reg-gate.js?v=20260514-reg-gate"></script>
     <script src="/static/onboarding.js?v=20260514-onboarding2"></script>

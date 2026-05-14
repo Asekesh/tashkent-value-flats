@@ -30,6 +30,7 @@ const filterIds = Object.keys(defaultFilters);
 const statusEl = document.querySelector("#status");
 const dashboardList = document.querySelector("#dashboardList");
 const listingsList = document.querySelector("#listingsList");
+const favoritesListEl = document.querySelector("#favoritesList");
 const insightPanel = document.querySelector("#insightPanel");
 const runList = document.querySelector("#runList");
 const sourceStatsEl = document.querySelector("#sourceStats");
@@ -347,6 +348,8 @@ function renderAll() {
   renderStats();
   renderDashboardList();
   renderListingsList();
+  renderFavoritesList();
+  renderFavoritesBadge();
   renderInsight();
   renderRuns();
   renderListingsTotal();
@@ -417,6 +420,23 @@ function renderListingsList() {
   bindCards(listingsList);
 }
 
+function renderFavoritesList() {
+  if (!favoritesListEl) return;
+  favoritesListEl.innerHTML = state.favorites.length
+    ? state.favorites.map((listing, index) => listingCard(listing, index + 1)).join("")
+    : emptyState("В избранном пусто", "Нажмите ♡ на карточке объявления, чтобы сохранить его сюда.");
+  bindCards(favoritesListEl);
+  const totalEl = document.querySelector("#favoritesTotal");
+  if (totalEl) totalEl.textContent = formatNumber(state.favorites.length);
+}
+
+function renderFavoritesBadge() {
+  const badge = document.querySelector("#favoritesBadge");
+  if (!badge) return;
+  badge.textContent = state.favorites.length;
+  badge.hidden = state.favorites.length === 0;
+}
+
 function renderInsight() {
   const listing = state.listings.find((item) => item.id === state.selectedId);
   if (!listing) {
@@ -479,7 +499,7 @@ function listingCard(listing, rank) {
   const photo = listing.photos?.[0] ?? "";
   const discount = listing.market?.discount_percent;
   const selected = state.selectedId === listing.id ? " selected" : "";
-  const favorite = state.favorites.includes(listing.id) ? " active" : "";
+  const favorite = isFavorite(listing.id) ? " active" : "";
   return `
     <article class="listing-card${selected}" data-id="${listing.id}">
       <div class="listing-media">${photo ? `<img src="${escapeAttr(photo)}" alt="${escapeAttr(listing.title)}" loading="lazy" />` : "▦"}</div>
@@ -519,6 +539,7 @@ function bindCards(root) {
       state.selectedId = Number(card.dataset.id);
       renderDashboardList();
       renderListingsList();
+      renderFavoritesList();
       renderInsight();
     });
   });
@@ -897,11 +918,25 @@ function makeHistoryVerdict(summary) {
   return null;
 }
 
+function isFavorite(id) {
+  return state.favorites.some((item) => item.id === id);
+}
+
 function toggleFavorite(id) {
-  state.favorites = state.favorites.includes(id) ? state.favorites.filter((item) => item !== id) : [...state.favorites, id];
+  if (isFavorite(id)) {
+    state.favorites = state.favorites.filter((item) => item.id !== id);
+  } else {
+    const listing =
+      state.listings.find((item) => item.id === id) ||
+      state.favorites.find((item) => item.id === id);
+    if (!listing) return;
+    state.favorites = [...state.favorites, listing];
+  }
   window.localStorage.setItem("tashkent-value-flats:favorites", JSON.stringify(state.favorites));
   renderDashboardList();
   renderListingsList();
+  renderFavoritesList();
+  renderFavoritesBadge();
 }
 
 function readFilters() {
@@ -965,7 +1000,11 @@ function formatDate(value) {
 
 function readFavorites() {
   try {
-    return JSON.parse(window.localStorage.getItem("tashkent-value-flats:favorites") ?? "[]");
+    const parsed = JSON.parse(window.localStorage.getItem("tashkent-value-flats:favorites") ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    // Старый формат хранил только id (числа) — объекты по ним не восстановить,
+    // оставляем только полноценные карточки.
+    return parsed.filter((item) => item && typeof item === "object" && "id" in item);
   } catch {
     return [];
   }
@@ -994,6 +1033,8 @@ function escapeAttr(value) {
 }
 
 writeFilters(defaultFilters);
+renderFavoritesList();
+renderFavoritesBadge();
 fetchListings(defaultFilters);
 fetchDashboardStats();
 fetchRuns();
