@@ -21,7 +21,7 @@
           <p>Навигация</p>
           <button class="nav-item active" data-view-button="dashboard" type="button"><span>⌂</span><span><strong>Главная</strong><small>лучшие сделки</small></span></button>
           <button class="nav-item" data-view-button="listings" type="button"><span>▦</span><span><strong>Объявления</strong><small>поиск и фильтры</small></span></button>
-          <button class="nav-item" data-view-button="admin" type="button"><span>⚙</span><span><strong>Управление</strong><small>сбор данных</small></span></button>
+          <button id="scrapeAdminNav" class="nav-item" data-view-button="admin" type="button" hidden><span>⚙</span><span><strong>Управление</strong><small>сбор данных</small></span></button>
           <a id="adminPanelLink" class="nav-item" href="/admin" hidden><span>◆</span><span><strong>Админ-панель</strong><small>пользователи и метрики</small></span></a>
         </nav>
         <div class="sidebar-foot">
@@ -200,8 +200,10 @@
           var me = await fetch("/auth/me", { credentials: "same-origin" }).then(function (r) { return r.json(); });
           if (me && me.authenticated) {
             if (me.role === "admin") {
-              var adminLink = document.getElementById("adminPanelLink");
-              if (adminLink) adminLink.hidden = false;
+              ["adminPanelLink", "scrapeAdminNav"].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) el.hidden = false;
+              });
             }
             var name = me.first_name || me.username || ("id" + me.telegram_id);
             box.innerHTML =
