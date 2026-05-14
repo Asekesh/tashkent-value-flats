@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     admin_telegram_ids: str = ""
 
+    # --- Registration gate (Step 5) ---
+    # After the prompt is dismissed once, re-show it no more often than
+    # every N meaningful actions (filter / sort / open card).
+    reg_gate_prompt_every: int = 3
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

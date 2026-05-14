@@ -65,7 +65,11 @@ def logout() -> RedirectResponse:
 @router.get("/config")
 def auth_config() -> dict:
     """Public bits the frontend needs to render the Telegram Login Widget."""
-    return {"bot_username": get_settings().telegram_bot_username}
+    settings = get_settings()
+    return {
+        "bot_username": settings.telegram_bot_username,
+        "reg_prompt_every": settings.reg_gate_prompt_every,
+    }
 
 
 @router.get("/me")
