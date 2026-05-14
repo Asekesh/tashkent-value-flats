@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Админка · {% block title %}{% endblock %}</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: #f1f5f9;
+        color: #0f172a;
+      }
+      a { color: #2563eb; }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        padding: 14px 28px;
+        background: #0f172a;
+        color: #fff;
+      }
+      header strong { font-size: 15px; }
+      header nav { display: flex; gap: 16px; }
+      header nav a { color: #cbd5e1; text-decoration: none; font-size: 14px; }
+      header nav a:hover { color: #fff; }
+      header .spacer { flex: 1; }
+      header .who { font-size: 13px; color: #94a3b8; }
+      main { max-width: 1100px; margin: 24px auto; padding: 0 24px; }
+      h1 { font-size: 20px; margin: 0 0 18px; }
+      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+      .card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .card .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
+      .card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
+      .section { margin-top: 26px; }
+      .section h2 { font-size: 15px; margin: 0 0 12px; }
+      table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; }
+      th, td { padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid #eef2f6; }
+      th { background: #f8fafc; color: #475569; font-weight: 600; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+      .pill-admin { background: #fee2e2; color: #b91c1c; }
+      .pill-user { background: #e2e8f0; color: #475569; }
+      .pill-agent { background: #dbeafe; color: #1d4ed8; }
+      .pill-individual { background: #f1f5f9; color: #475569; }
+      .pill-free { background: #f1f5f9; color: #475569; }
+      .pill-pro { background: #dcfce7; color: #15803d; }
+      form.inline { display: inline; }
+      button {
+        font: inherit;
+        font-size: 12px;
+        padding: 4px 9px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+      }
+      button:hover { background: #f1f5f9; }
+      .search { margin-bottom: 14px; }
+      .search input { padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 7px; font: inherit; min-width: 240px; }
+      .pager { margin-top: 14px; display: flex; gap: 10px; align-items: center; font-size: 13px; }
+      .chart { display: flex; align-items: flex-end; gap: 3px; height: 130px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
+      .chart .bar { flex: 1; background: #2563eb; border-radius: 3px 3px 0 0; min-height: 2px; }
+      .chart .bar-wrap { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+      .chart-legend { font-size: 11px; color: #94a3b8; margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Ташкент Недвижимость · Админ</strong>
+      <nav>
+        <a href="/admin">Дашборд</a>
+        <a href="/admin/users">Пользователи</a>
+      </nav>
+      <span class="spacer"></span>
+      <span class="who">{{ admin.first_name or admin.username or admin.telegram_id }}</span>
+      <nav><a href="/auth/logout">Выйти</a></nav>
+    </header>
+    <main>{% block content %}{% endblock %}</main>
+  </body>
+</html>

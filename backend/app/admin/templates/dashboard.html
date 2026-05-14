@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Дашборд{% endblock %}
+{% block content %}
+<h1>Дашборд</h1>
+
+<div class="cards">
+  <div class="card"><div class="label">Всего пользователей</div><div class="value">{{ metrics.total_users }}</div></div>
+  <div class="card"><div class="label">Новых сегодня</div><div class="value">{{ metrics.new_today }}</div></div>
+  <div class="card"><div class="label">Новых за 7 дней</div><div class="value">{{ metrics.new_7d }}</div></div>
+  <div class="card"><div class="label">Новых за 30 дней</div><div class="value">{{ metrics.new_30d }}</div></div>
+  <div class="card"><div class="label">Входов за 7 дней</div><div class="value">{{ metrics.logins_7d }}</div></div>
+</div>
+
+<div class="section">
+  <h2>По типу аккаунта</h2>
+  <div class="cards">
+    <div class="card"><div class="label">Физлица</div><div class="value">{{ metrics.account_types.individual }}</div></div>
+    <div class="card"><div class="label">Агенты</div><div class="value">{{ metrics.account_types.agent }}</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>По тарифу</h2>
+  <div class="cards">
+    <div class="card"><div class="label">Free</div><div class="value">{{ metrics.plans.free }}</div></div>
+    <div class="card"><div class="label">Pro</div><div class="value">{{ metrics.plans.pro }}</div></div>
+    <div class="card"><div class="label">Agent</div><div class="value">{{ metrics.plans.agent }}</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Регистрации по дням (30 дней)</h2>
+  <div class="chart">
+    {% for row in metrics.registrations %}
+      {% set h = (row.count / metrics.registrations_max * 100) if metrics.registrations_max else 0 %}
+      <div class="bar-wrap" title="{{ row.day }}: {{ row.count }}">
+        <div class="bar" style="height: {{ h }}%;"></div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="chart-legend">
+    {{ metrics.registrations[0].day }} — {{ metrics.registrations[-1].day }} ·
+    максимум за день: {{ metrics.registrations_max }}
+  </div>
+</div>
+{% endblock %}
