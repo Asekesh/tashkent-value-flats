@@ -504,6 +504,7 @@ function listingCard(listing, rank) {
           <div class="row-actions">
             <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">♡</button>
             <button class="outline-link" data-cma="${listing.id}" title="Сравнительный анализ" type="button">▤ Найти аналоги</button>
+            <button class="outline-link" data-history="${listing.id}" title="История объявления" type="button">◷ История</button>
             <a class="outline-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">↗ Смотреть оригинал</a>
           </div>
         </div>
@@ -531,6 +532,12 @@ function bindCards(root) {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       openCma(Number(button.dataset.cma));
+    });
+  });
+  root.querySelectorAll("[data-history]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openHistory(Number(button.dataset.history));
     });
   });
   // Hotlinked photos from the source platforms can 403/404 (hotlink
@@ -725,6 +732,169 @@ function makeCmaVerdict(diff) {
     return { kind: "bad", title: `Дорого: на ${diff.toFixed(1)}% выше рынка`, body: "Аргумент для торга — покажите медиану по аналогам." };
   }
   return { kind: "neutral", title: `Цена в рынке: отклонение ${diff > 0 ? "+" : ""}${diff.toFixed(1)}%`, body: "Объект продаётся по средней цене для этого сегмента." };
+}
+
+async function openHistory(listingId) {
+  const listing = state.listings.find((item) => item.id === listingId);
+  showHistoryModal(listing);
+  try {
+    const response = await fetch(`/api/listings/${listingId}/history`);
+    if (!response.ok) throw new Error("history_failed");
+    const result = await response.json();
+    renderHistoryBody(result);
+  } catch {
+    renderHistoryError("Не удалось загрузить историю");
+  }
+}
+
+function showHistoryModal(listing) {
+  let overlay = document.querySelector("#historyOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "historyOverlay";
+    overlay.className = "cma-overlay";
+    overlay.innerHTML = `
+      <div class="cma-modal" id="historyModal">
+        <header class="cma-header">
+          <div>
+            <h2>История объявления</h2>
+            <p id="historySubjectTitle"></p>
+          </div>
+          <div class="cma-header-actions">
+            <button class="icon-button" id="historyCloseButton" type="button" aria-label="Закрыть">×</button>
+          </div>
+        </header>
+        <div class="cma-body" id="historyBody"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeHistory();
+    });
+    overlay.querySelector("#historyCloseButton").addEventListener("click", closeHistory);
+  }
+  overlay.querySelector("#historySubjectTitle").textContent = listing?.title ?? "";
+  overlay.querySelector("#historyBody").innerHTML = `<div class="cma-loading">⟳ Загружаем историю...</div>`;
+  overlay.classList.add("active");
+}
+
+function closeHistory() {
+  const overlay = document.querySelector("#historyOverlay");
+  if (overlay) overlay.classList.remove("active");
+}
+
+function renderHistoryError(message) {
+  const body = document.querySelector("#historyBody");
+  if (body) body.innerHTML = `<div class="cma-error">${escapeHtml(message)}</div>`;
+}
+
+function renderHistoryBody(result) {
+  const body = document.querySelector("#historyBody");
+  if (!body) return;
+  const { summary, events } = result;
+  const change = summary.total_price_change_percent;
+
+  const rows = [];
+  if (summary.first_seen_at) rows.push(["Впервые увидели", formatDate(summary.first_seen_at)]);
+  if (summary.first_price_usd != null) rows.push(["Стартовая цена", `$${money(summary.first_price_usd)}`]);
+  if (summary.current_price_usd != null) rows.push(["Текущая цена", `$${money(summary.current_price_usd)}`]);
+  if (change != null) {
+    const cls = change < 0 ? "diff-neg" : change > 0 ? "diff-pos" : "";
+    rows.push(["Изменение цены", `<span class="${cls}">${change > 0 ? "+" : ""}${change.toFixed(1)}%</span>`]);
+  }
+  rows.push(["Изменений цены", String(summary.price_change_count ?? 0)]);
+  rows.push(["Перевыставлений", String(summary.relisted_count ?? 0)]);
+
+  const summaryHtml = rows
+    .map(([label, value]) => `<div class="cma-summary-row"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
+
+  const verdict = makeHistoryVerdict(summary);
+  const verdictHtml = verdict
+    ? `<div class="cma-verdict ${verdict.kind}"><strong>${escapeHtml(verdict.title)}</strong><span>${escapeHtml(verdict.body)}</span></div>`
+    : "";
+
+  const timelineHtml = (events && events.length)
+    ? `<section class="history-timeline">${events.map(historyRow).join("")}</section>`
+    : `<div class="cma-empty">Событий по объявлению ещё нет.</div>`;
+
+  body.innerHTML = `
+    <section class="cma-summary">${summaryHtml}${verdictHtml}</section>
+    ${timelineHtml}
+  `;
+}
+
+function historyRow(event) {
+  const meta = describeHistoryEvent(event);
+  const detail = meta.detail ? `<div class="history-detail">${escapeHtml(meta.detail)}</div>` : "";
+  const note = event.note ? `<div class="history-note">${escapeHtml(event.note)}</div>` : "";
+  return `
+    <div class="history-row ${meta.kind}">
+      <div class="history-icon">${meta.icon}</div>
+      <div class="history-content">
+        <div class="history-title">${escapeHtml(meta.title)}</div>
+        ${detail}
+        ${note}
+        <div class="history-date">${formatDate(event.at)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function describeHistoryEvent(event) {
+  switch (event.event_type) {
+    case "first_seen":
+      return {
+        title: "Впервые появилось",
+        detail: event.new_price_usd ? `Стартовая цена: $${money(event.new_price_usd)}` : "",
+        kind: "neutral",
+        icon: "◷",
+      };
+    case "price_changed": {
+      const drop = (event.old_price_usd ?? 0) > (event.new_price_usd ?? 0);
+      const diff = event.old_price_usd && event.old_price_usd > 0 && event.new_price_usd != null
+        ? ((event.new_price_usd - event.old_price_usd) / event.old_price_usd) * 100
+        : null;
+      return {
+        title: drop ? "Цена снижена" : "Цена повышена",
+        detail: `$${money(event.old_price_usd)} → $${money(event.new_price_usd)}${diff != null ? ` (${diff > 0 ? "+" : ""}${diff.toFixed(1)}%)` : ""}`,
+        kind: drop ? "good" : "bad",
+        icon: drop ? "↓" : "↑",
+      };
+    }
+    case "relisted":
+      return { title: "Перевыставлено", detail: "", kind: "warn", icon: "↻" };
+    case "delisted":
+      return { title: "Снято с продажи", detail: "", kind: "muted", icon: "×" };
+    default:
+      return { title: event.event_type, detail: "", kind: "neutral", icon: "◷" };
+  }
+}
+
+function makeHistoryVerdict(summary) {
+  const change = summary.total_price_change_percent;
+  if (summary.relisted_count > 0 && change != null && change <= -5) {
+    return {
+      kind: "good",
+      title: "Продавец «прогрет»",
+      body: `Объявление перевыставлялось ${summary.relisted_count} раз и подешевело на ${Math.abs(change).toFixed(1)}% — можно торговаться смелее.`,
+    };
+  }
+  if (summary.relisted_count > 0) {
+    return {
+      kind: "warn",
+      title: "Объявление перевыставлялось",
+      body: "Продавец уже снимал и заново выставлял — это сигнал, что покупатели не идут по текущей цене.",
+    };
+  }
+  if (change != null && change <= -5) {
+    return {
+      kind: "good",
+      title: "Цена идёт вниз",
+      body: `За время наблюдения цена снизилась на ${Math.abs(change).toFixed(1)}% — продавец готов уступать.`,
+    };
+  }
+  return null;
 }
 
 function toggleFavorite(id) {
