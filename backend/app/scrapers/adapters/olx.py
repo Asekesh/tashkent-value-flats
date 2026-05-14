@@ -90,6 +90,36 @@ class OlxAdapter(SourceAdapter):
                 ) or []
         return listings
 
+    def fetch_listing_photos(self, url: str, client: httpx.Client) -> list[str] | None:
+        """Fetch one listing's detail page and return its photos.
+
+        Returns ``None`` when the listing is gone (HTTP 404) so the caller can
+        delist it; an empty list means the page loaded but exposed no photos.
+        """
+        response = client.get(url)
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return _extract_detail_photos(response.text)
+
+
+_PRERENDERED_STATE_RE = re.compile(
+    r"window\.__PRERENDERED_STATE__\s*=\s*(\"(?:[^\"\\]|\\.)*\")"
+)
+
+
+def _load_prerendered_state(html: str) -> dict | None:
+    """Decode OLX's ``window.__PRERENDERED_STATE__`` blob — a JSON string
+    literal that itself holds escaped JSON."""
+    match = _PRERENDERED_STATE_RE.search(html)
+    if not match:
+        return None
+    try:
+        data = json.loads(json.loads(match.group(1)))
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
 
 def _extract_prerendered_photos(html: str) -> dict[str, list[str]]:
     """Photos by id/url-code from OLX's ``window.__PRERENDERED_STATE__`` blob.
@@ -98,14 +128,8 @@ def _extract_prerendered_photos(html: str) -> dict[str, list[str]]:
     ``no_thumbnail`` placeholder and only hydrated client-side, so the photos
     have to come from the embedded state instead.
     """
-    match = re.search(
-        r"window\.__PRERENDERED_STATE__\s*=\s*(\"(?:[^\"\\]|\\.)*\")", html
-    )
-    if not match:
-        return {}
-    try:
-        data = json.loads(json.loads(match.group(1)))
-    except (json.JSONDecodeError, ValueError):
+    data = _load_prerendered_state(html)
+    if data is None:
         return {}
     ads = data.get("listing", {}).get("listing", {}).get("ads")
     if not isinstance(ads, list):
@@ -123,6 +147,22 @@ def _extract_prerendered_photos(html: str) -> dict[str, list[str]]:
         if url:
             photo_map[_source_id_from_url(url)] = photos
     return photo_map
+
+
+def _extract_detail_photos(html: str) -> list[str]:
+    """Photos from a single listing's detail page (``ad.ad.photos`` in the
+    ``__PRERENDERED_STATE__`` blob). Used to backfill listings that dropped out
+    of the 25-page search window and can't be reached via the listing pages."""
+    data = _load_prerendered_state(html)
+    if data is None:
+        return []
+    ad = data.get("ad")
+    if isinstance(ad, dict):
+        ad = ad.get("ad", ad)
+    photos = ad.get("photos") if isinstance(ad, dict) else None
+    if isinstance(photos, list):
+        return [str(photo) for photo in photos if photo][:5]
+    return []
 
 
 def _extract_jsonld_offers(soup: BeautifulSoup) -> list[dict]:

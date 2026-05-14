@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models import ScrapeRun, ScrapeTask
 from app.schemas.listing import ScrapeRunOut, ScrapeRunRequest, ScrapeSourceOut, ScrapeTaskOut
-from app.services import scrape_progress
+from app.services import photo_backfill, scrape_progress
 from app.services.scrape import get_source_page_stats, start_scrape_in_background
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -48,3 +48,22 @@ def get_scrape_tasks(db: Session = Depends(get_db)) -> list[ScrapeTaskOut]:
 @router.get("/scrape/sources", response_model=list[ScrapeSourceOut])
 def get_scrape_sources(source: str = "all") -> list[ScrapeSourceOut]:
     return [ScrapeSourceOut(**item) for item in get_source_page_stats(source)]
+
+
+@router.post("/backfill/olx-photos")
+def run_olx_photo_backfill() -> dict:
+    started = photo_backfill.start_photo_backfill_in_background()
+    if not started:
+        return {"started": False, "reason": "already_running", "progress": photo_backfill.get_state()}
+    return {"started": True, "progress": photo_backfill.get_state()}
+
+
+@router.get("/backfill/progress")
+def get_backfill_progress() -> dict:
+    return photo_backfill.get_state()
+
+
+@router.post("/backfill/stop")
+def stop_olx_photo_backfill() -> dict:
+    stopped = photo_backfill.request_stop()
+    return {"stopped": stopped, "progress": photo_backfill.get_state()}
