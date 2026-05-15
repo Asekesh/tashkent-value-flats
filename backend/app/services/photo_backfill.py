@@ -4,6 +4,8 @@ OLX search only exposes 25 pages, so listings that scroll past that window
 can no longer be reached via the listing pages — but their detail pages stay
 live by direct URL. This walks active OLX listings that have no photos, pulls
 the photos straight from each detail page, and delists the ones that 404.
+
+Triggered via POST /api/admin/backfill/olx-photos; progress at GET /backfill/progress.
 """
 
 from __future__ import annotations
