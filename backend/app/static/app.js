@@ -378,9 +378,9 @@ function renderPagination() {
   const prevDisabled = state.page <= 0 ? "disabled" : "";
   const nextDisabled = state.page >= totalPages - 1 ? "disabled" : "";
   container.innerHTML = `
-    <button type="button" class="ghost-button" data-page-prev ${prevDisabled}>← Назад</button>
+    <button type="button" class="btn btn-ghost" data-page-prev ${prevDisabled}>← Назад</button>
     <span class="pagination-info">Стр. ${state.page + 1} из ${totalPages}</span>
-    <button type="button" class="ghost-button" data-page-next ${nextDisabled}>Вперёд →</button>
+    <button type="button" class="btn btn-ghost" data-page-next ${nextDisabled}>Вперёд →</button>
   `;
   const prev = container.querySelector("[data-page-prev]");
   const next = container.querySelector("[data-page-next]");
@@ -454,7 +454,7 @@ function renderInsight() {
       <dt>Дубли</dt><dd>${listing.duplicate_count}</dd>
       <dt>Источник</dt><dd>${escapeHtml(sourceLabel(listing.source))}</dd>
     </dl>
-    <a class="primary-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">Смотреть оригинал</a>
+    <a class="btn btn-secondary btn-block" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">Смотреть оригинал</a>
   `;
 }
 
@@ -523,9 +523,9 @@ function listingCard(listing, rank) {
           <div><strong>$${money(listing.price_usd)}</strong><span>рынок: ${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}/м²` : "мало данных"}</span></div>
           <div class="row-actions">
             <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">♡</button>
-            <button class="outline-link" data-cma="${listing.id}" title="Сравнительный анализ" type="button">▤ Найти аналоги</button>
-            <button class="outline-link" data-history="${listing.id}" title="История объявления" type="button">◷ История</button>
-            <a class="outline-link" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">↗ Смотреть оригинал</a>
+            <button class="btn btn-ghost" data-cma="${listing.id}" title="Сравнительный анализ" type="button">▤ Найти аналоги</button>
+            <button class="btn btn-ghost" data-history="${listing.id}" title="История объявления" type="button">◷ История</button>
+            <a class="btn btn-ghost" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">↗ Смотреть оригинал</a>
           </div>
         </div>
       </div>
@@ -604,7 +604,7 @@ function showCmaModal(listing) {
             <p id="cmaSubjectTitle"></p>
           </div>
           <div class="cma-header-actions">
-            <button class="ghost-button" id="cmaPrintButton" type="button" disabled>▤ PDF / Печать</button>
+            <button class="btn btn-ghost" id="cmaPrintButton" type="button" disabled>▤ PDF / Печать</button>
             <button class="icon-button" id="cmaCloseButton" type="button" aria-label="Закрыть">×</button>
           </div>
         </header>
@@ -728,7 +728,7 @@ function cmaTable(subject, analogs) {
           <td>$${money(a.price_usd)}</td>
           <td>$${money(a.price_per_m2_usd)}</td>
           <td class="${positive ? "diff-pos" : "diff-neg"}">${positive ? "+" : ""}${diff.toFixed(1)}%</td>
-          <td><a class="outline-link cma-table-link" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer">↗</a></td>
+          <td><a class="btn btn-ghost cma-table-link" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer">↗</a></td>
         </tr>
       `;
     })

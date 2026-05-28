@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ташкент Недвижимость</title>
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260514-favorites" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260528-apple-polish" />
   </head>
   <body>
     <main class="app-shell">
@@ -56,7 +56,7 @@
             <div><b id="scrapeProgressFound">0</b><span>найдено</span></div>
             <div><b class="accent" id="scrapeProgressNew">0</b><span>новых</span></div>
           </div>
-          <button id="stopScanButton" class="ghost-button stop-button" type="button">■ Остановить</button>
+          <button id="stopScanButton" class="btn btn-ghost stop-button" type="button">■ Остановить</button>
         </div>
 
         <section id="dashboardView" class="view active page">
@@ -65,7 +65,7 @@
               <h2>Лучшие по цене за м²</h2>
               <p>Квартиры со скидкой 15–99% от средней цены ЖК · самая низкая цена за м² в каждом ЖК</p>
             </div>
-            <button class="ghost-button" data-open-listings type="button">Все объявления →</button>
+            <button class="btn btn-ghost" data-open-listings type="button">Все объявления →</button>
           </div>
 
           <section class="stats-grid stats-grid-3">
@@ -137,8 +137,8 @@
               <label>Скидка от, %<input id="discount_min" placeholder="15" /></label>
             </div>
             <div class="filter-actions">
-              <button id="applyButton" class="primary-button" type="button">⌕ Применить</button>
-              <button id="resetButton" class="ghost-button" type="button">× Сбросить</button>
+              <button id="applyButton" class="btn btn-primary" type="button">⌕ Применить</button>
+              <button id="resetButton" class="btn btn-ghost" type="button">× Сбросить</button>
             </div>
           </section>
 
@@ -152,7 +152,7 @@
               <h2>Избранное</h2>
               <p><span id="favoritesTotal">0</span> сохранённых объектов. Список хранится в этом браузере.</p>
             </div>
-            <button class="ghost-button" data-open-listings type="button">К объявлениям →</button>
+            <button class="btn btn-ghost" data-open-listings type="button">К объявлениям →</button>
           </div>
           <section id="favoritesList" class="deal-list"></section>
         </section>
@@ -164,16 +164,16 @@
               <p>Запуск live-сбора и последние состояния парсеров.</p>
             </div>
             <div class="page-actions">
-              <button id="refreshRunsButton" class="ghost-button" type="button">↻ Обновить</button>
-              <button id="adminImportButton" class="primary-button" type="button">▷ Запустить сейчас</button>
+              <button id="refreshRunsButton" class="btn btn-ghost" type="button">↻ Обновить</button>
+              <button id="adminImportButton" class="btn btn-primary" type="button">▷ Запустить сейчас</button>
             </div>
           </div>
           <section class="admin-grid">
             <article class="admin-card admin-card-wide">
               <div class="section-title">▷ <span>Управление парсингом</span></div>
               <div class="scan-actions">
-                <button id="quickScanButton" class="primary-button scan-button" type="button">▷ Запустить сейчас</button>
-                <button id="fullScanButton" class="ghost-button scan-button" type="button">▷ Полное сканирование</button>
+                <button id="quickScanButton" class="btn btn-primary scan-button" type="button">▷ Запустить сейчас</button>
+                <button id="fullScanButton" class="btn btn-ghost scan-button" type="button">▷ Полное сканирование</button>
               </div>
               <p class="scan-note"><strong>Запустить сейчас</strong> — быстрый режим, стоп после 50 уже известных объявлений. <strong>Полное сканирование</strong> — проходит все страницы выбранных площадок. Запущенный парсинг можно остановить кнопкой в карточке прогресса.</p>
               <div class="source-picker" id="sourcePicker" aria-label="Площадки для сканирования">
@@ -188,7 +188,7 @@
             </article>
             <article class="admin-card">
               <div class="section-title">☰ <span>Страницы площадок</span></div>
-              <button id="refreshSourcePagesButton" class="ghost-button" type="button">↻ Посчитать страницы</button>
+              <button id="refreshSourcePagesButton" class="btn btn-ghost" type="button">↻ Посчитать страницы</button>
               <div id="sourceStats" class="source-stats"></div>
             </article>
             <article class="admin-card">
@@ -218,10 +218,10 @@
       </div>
     </main>
     <button id="scrollTopButton" class="scroll-top" type="button" aria-label="Наверх" hidden>↑</button>
-    <script src="/static/app.js?v=20260514-favorites"></script>
+    <script src="/static/app.js?v=20260514-tokens"></script>
     <script src="/static/service-features.js?v=20260514-history"></script>
     <script src="/static/reg-gate.js?v=20260514-reg-gate"></script>
-    <script src="/static/onboarding.js?v=20260514-onboarding2"></script>
+    <script src="/static/onboarding.js?v=20260514-tokens"></script>
     <script>
       // Telegram login widget — isolated from app.js, public pages stay open.
       (async function () {

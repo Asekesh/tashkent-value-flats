@@ -41,7 +41,7 @@
       '<ul class="reg-features onb-grid">' +
       cardsHtml() +
       "</ul>" +
-      '<button class="reg-primary" type="button">Понятно, начать</button>' +
+      '<button class="btn btn-primary btn-block" type="button">Понятно, начать</button>' +
       '<button class="reg-later" type="button">Больше не показывать</button>' +
       "</div>";
     document.body.appendChild(overlay);
@@ -49,7 +49,7 @@
       if (event.target === overlay) closeModal();
     });
     overlay.querySelector(".reg-close").addEventListener("click", closeModal);
-    overlay.querySelector(".reg-primary").addEventListener("click", closeModal);
+    overlay.querySelector(".btn-primary").addEventListener("click", closeModal);
     overlay.querySelector(".reg-later").addEventListener("click", closeModal);
     return overlay;
   }
