@@ -7,6 +7,8 @@ const defaultFilters = {
   price_max: "",
   ppm_min: "",
   ppm_max: "",
+  floor_min: "",
+  floor_max: "",
   discount_min: "",
   source: "",
   sort: "discount",
@@ -504,7 +506,7 @@ function listingCard(listing, rank) {
   const selected = state.selectedId === listing.id ? " selected" : "";
   const favorite = isFavorite(listing.id) ? " active" : "";
   return `
-    <article class="listing-card${selected}" data-id="${listing.id}">
+    <article class="listing-card${selected}" data-id="${listing.id}" data-url="${escapeAttr(listing.url)}">
       <div class="listing-media">${photo ? `<img src="${escapeAttr(photo)}" alt="${escapeAttr(listing.title)}" loading="lazy" />` : icon("grid")}</div>
       <div class="listing-body">
         <div class="chips">
@@ -528,7 +530,6 @@ function listingCard(listing, rank) {
             <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">${icon(favorite ? "heart-fill" : "heart")}</button>
             <button class="btn btn-ghost" data-cma="${listing.id}" title="Сравнительный анализ" type="button">${icon("chart")} Найти аналоги</button>
             <button class="btn btn-ghost" data-history="${listing.id}" title="История объявления" type="button">${icon("clock")} История</button>
-            <a class="btn btn-ghost" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">${icon("arrow-up-right")} Источник</a>
           </div>
         </div>
       </div>
@@ -544,6 +545,8 @@ function bindCards(root) {
       renderListingsList();
       renderFavoritesList();
       renderInsight();
+      const url = card.dataset.url;
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
     });
   });
   root.querySelectorAll("[data-favorite]").forEach((button) => {

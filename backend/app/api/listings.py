@@ -44,6 +44,8 @@ def get_listings(
     price_max: Optional[float] = None,
     ppm_min: Optional[float] = None,
     ppm_max: Optional[float] = None,
+    floor_min: Optional[int] = None,
+    floor_max: Optional[int] = None,
     discount_min: Optional[float] = None,
     source: Optional[str] = None,
     sort: Literal["discount", "price_per_m2", "fresh", "price"] = "discount",
@@ -72,6 +74,10 @@ def get_listings(
         stmt = stmt.where(Listing.price_per_m2_usd >= ppm_min)
     if ppm_max is not None:
         stmt = stmt.where(Listing.price_per_m2_usd <= ppm_max)
+    if floor_min is not None:
+        stmt = stmt.where(Listing.floor >= floor_min)
+    if floor_max is not None:
+        stmt = stmt.where(Listing.floor <= floor_max)
     if source:
         stmt = stmt.where(Listing.source == source)
 
