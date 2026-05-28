@@ -1,8 +1,23 @@
+import json
+
 from app.scrapers.registry import parse_fixture
-from app.scrapers.adapters.olx import OlxAdapter
+from app.scrapers.adapters.olx import OlxAdapter, _detail_is_archived
 from app.scrapers.adapters.realt24 import Realt24Adapter
 from app.scrapers.adapters.uybor import UyborAdapter
 from app.services.normalization import price_per_m2, to_usd
+
+
+def _olx_detail_html(status: str, is_active: bool) -> str:
+    state = {"ad": {"ad": {"status": status, "isActive": is_active, "photos": []}}}
+    blob = json.dumps(json.dumps(state))
+    return f"<html><body><script>window.__PRERENDERED_STATE__ = {blob};</script></body></html>"
+
+
+def test_olx_detail_archived_state_detected():
+    assert _detail_is_archived(_olx_detail_html("outdated", False)) is True
+    assert _detail_is_archived(_olx_detail_html("removed_by_user", False)) is True
+    assert _detail_is_archived(_olx_detail_html("active", True)) is False
+    assert _detail_is_archived("<html><body>no state here</body></html>") is False
 
 
 def test_olx_fixture_parser_normalizes_core_fields():

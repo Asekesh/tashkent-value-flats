@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models import Listing, ScrapeRun, ScrapeTask
 from app.scrapers.registry import ADAPTERS, get_adapter, parse_fixture
-from app.services import scrape_progress
+from app.services import archive_sweep, scrape_progress
 from app.services.listings import mark_delisted_for_source, upsert_raw_listing
 from app.services.normalization import price_per_m2, to_usd
 
@@ -66,6 +66,11 @@ def run_scrape_for_source(db: Session, source: str, mode: str = "auto", trigger:
         run.updated_count = updated_count
         if use_live and mode in {"full", "live"}:
             mark_delisted_for_source(db, source)
+            if source == "olx":
+                # OLX hides archived ads from search immediately; the 3-day
+                # delist heuristic above is too slow, so probe detail pages.
+                db.commit()
+                archive_sweep.start_sweep_in_background()
     except Exception as exc:  # pragma: no cover - defensive run logging
         run.status = "failed"
         run.error = str(exc)

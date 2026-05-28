@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models import ScrapeRun, ScrapeTask
 from app.schemas.listing import ScrapeRunOut, ScrapeRunRequest, ScrapeSourceOut, ScrapeTaskOut
-from app.services import photo_backfill, scrape_progress
+from app.services import archive_sweep, photo_backfill, scrape_progress
 from app.services.scrape import get_source_page_stats, start_scrape_in_background
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -67,3 +67,22 @@ def get_backfill_progress() -> dict:
 def stop_olx_photo_backfill() -> dict:
     stopped = photo_backfill.request_stop()
     return {"stopped": stopped, "progress": photo_backfill.get_state()}
+
+
+@router.post("/sweep/olx-archived")
+def run_olx_archive_sweep() -> dict:
+    started = archive_sweep.start_sweep_in_background()
+    if not started:
+        return {"started": False, "reason": "already_running", "progress": archive_sweep.get_state()}
+    return {"started": True, "progress": archive_sweep.get_state()}
+
+
+@router.get("/sweep/progress")
+def get_sweep_progress() -> dict:
+    return archive_sweep.get_state()
+
+
+@router.post("/sweep/stop")
+def stop_olx_archive_sweep() -> dict:
+    stopped = archive_sweep.request_stop()
+    return {"stopped": stopped, "progress": archive_sweep.get_state()}

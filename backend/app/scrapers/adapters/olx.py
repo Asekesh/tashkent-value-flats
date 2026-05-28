@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from dataclasses import dataclass
 from typing import Iterator
 from urllib.parse import parse_qs, urlparse
 
@@ -12,6 +13,18 @@ from bs4 import BeautifulSoup
 from app.scrapers.adapters.common import parse_fixture_cards
 from app.scrapers.base import RawListing, SourceAdapter, SourcePageStats
 from app.services.normalization import compact_text, normalize_district
+
+
+@dataclass
+class ListingProbe:
+    """Result of poking an OLX detail page.
+
+    ``is_gone=True`` means the listing no longer counts as live: page returned
+    404/410, or the embedded ad state says the ad is archived/inactive (OLX
+    keeps a stub page up after archiving and just flips ``isActive`` to false).
+    """
+    is_gone: bool
+    photos: list[str]
 
 
 class OlxAdapter(SourceAdapter):
@@ -90,17 +103,24 @@ class OlxAdapter(SourceAdapter):
                 ) or []
         return listings
 
-    def fetch_listing_photos(self, url: str, client: httpx.Client) -> list[str] | None:
-        """Fetch one listing's detail page and return its photos.
+    def probe_listing(self, url: str, client: httpx.Client) -> ListingProbe:
+        """Fetch detail page and report whether the listing is gone + its photos.
 
-        Returns ``None`` when the listing is gone (HTTP 404) so the caller can
-        delist it; an empty list means the page loaded but exposed no photos.
+        OLX returns 410 (not 404) for hard-deleted ads and serves a 200 page
+        with ``ad.isActive=false`` for archived ones, so both branches matter.
         """
         response = client.get(url)
-        if response.status_code == 404:
-            return None
+        if response.status_code in (404, 410):
+            return ListingProbe(is_gone=True, photos=[])
         response.raise_for_status()
-        return _extract_detail_photos(response.text)
+        if _detail_is_archived(response.text):
+            return ListingProbe(is_gone=True, photos=[])
+        return ListingProbe(is_gone=False, photos=_extract_detail_photos(response.text))
+
+    def fetch_listing_photos(self, url: str, client: httpx.Client) -> list[str] | None:
+        """Back-compat wrapper around :meth:`probe_listing`."""
+        probe = self.probe_listing(url, client)
+        return None if probe.is_gone else probe.photos
 
 
 _PRERENDERED_STATE_RE = re.compile(
@@ -147,6 +167,29 @@ def _extract_prerendered_photos(html: str) -> dict[str, list[str]]:
         if url:
             photo_map[_source_id_from_url(url)] = photos
     return photo_map
+
+
+def _detail_is_archived(html: str) -> bool:
+    """True when the embedded ad state marks the listing as not active.
+
+    OLX uses ``ad.isActive=false`` / ``ad.status!='active'`` to flag archived
+    or otherwise paused ads while still serving an HTTP 200 stub page.
+    """
+    data = _load_prerendered_state(html)
+    if data is None:
+        return False
+    ad = data.get("ad")
+    if isinstance(ad, dict):
+        ad = ad.get("ad", ad)
+    if not isinstance(ad, dict):
+        return False
+    is_active = ad.get("isActive")
+    if is_active is False:
+        return True
+    status = ad.get("status")
+    if isinstance(status, str) and status and status != "active":
+        return True
+    return False
 
 
 def _extract_detail_photos(html: str) -> list[str]:
