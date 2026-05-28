@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models import ScrapeRun, ScrapeTask
 from app.schemas.listing import ScrapeRunOut, ScrapeRunRequest, ScrapeSourceOut, ScrapeTaskOut
 from app.services import archive_sweep, photo_backfill, scrape_progress
+from app.services.dedup import merge_existing_duplicates
 from app.services.scrape import get_source_page_stats, start_scrape_in_background
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -86,3 +87,8 @@ def get_sweep_progress() -> dict:
 def stop_olx_archive_sweep() -> dict:
     stopped = archive_sweep.request_stop()
     return {"stopped": stopped, "progress": archive_sweep.get_state()}
+
+
+@router.post("/dedup/merge")
+def merge_duplicate_listings(dry_run: bool = False, db: Session = Depends(get_db)) -> dict:
+    return merge_existing_duplicates(db, dry_run=dry_run)

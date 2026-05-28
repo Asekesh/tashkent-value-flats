@@ -78,6 +78,48 @@ def test_olx_live_jsonld_parser_extracts_listing_fields():
     assert listings[0].district == "Яккасарайский район"
 
 
+def test_olx_live_parser_dedupes_jsonld_and_card_for_same_ad():
+    # Same OLX ad appears in both JSON-LD (URL slug id) and the HTML card grid
+    # (used to expose card[id] numeric DB id). Both must produce the same
+    # source_id so parse_live_page yields one RawListing — otherwise the ad is
+    # ingested twice and shows up as a duplicate in the dashboard.
+    html = """
+    <html><body>
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "offers": {
+          "@type": "AggregateOffer",
+          "offers": [
+            {
+              "@type": "Offer",
+              "priceCurrency": "UZS",
+              "areaServed": {"@type": "AdministrativeArea", "name": "Яккасарайский район"},
+              "name": "Яккасарай 2/6/6 65м2 евро люкс",
+              "price": 1028312999,
+              "url": "https://www.olx.uz/d/obyavlenie/test-ID4mkIT.html"
+            }
+          ]
+        }
+      }
+      </script>
+      <div data-cy="l-card" id="64461800">
+        <a href="https://www.olx.uz/d/obyavlenie/test-ID4mkIT.html">
+          <h4>Яккасарай 2/6/6 65м2 евро люкс</h4>
+        </a>
+        <p data-testid="ad-price">1 028 312 999 сум</p>
+        <p data-testid="location-date">Ташкент, Яккасарайский район — Сегодня</p>
+      </div>
+    </body></html>
+    """
+
+    listings = OlxAdapter().parse_live_page(html)
+
+    assert len(listings) == 1
+    assert listings[0].source_id == "4mkIT"
+
+
 def test_uybor_api_parser_extracts_listing_fields():
     payload = {
         "total": 1,

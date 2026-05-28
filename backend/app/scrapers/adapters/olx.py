@@ -297,7 +297,9 @@ def _card_to_raw_listing(card) -> RawListing | None:
     floor, total_floors = _extract_floor(title)
     location_text = compact_text(location_el.get_text(" ")) if location_el else ""
     district = normalize_district(_district_from_location(location_text))
-    source_id = card.get("id") or _source_id_from_url(url)
+    # URL slug, not card `id` attr — keep id format aligned with JSON-LD path
+    # so the in-page `seen` set dedupes the same ad across both extractors.
+    source_id = _source_id_from_url(url)
     photo_el = card.select_one("img")
     photos: list[str] = []
     if photo_el:
