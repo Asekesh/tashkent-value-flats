@@ -6,9 +6,11 @@ from datetime import datetime
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
-from app.models import ScrapeTask
+from app.models import Listing, ScrapeTask
 from app.services import scrape_progress
+from app.services.market_estimate import recompute_all as recompute_market_estimates
 from app.services.scrape import resolve_live_sources, run_scrape_for_source
+from sqlalchemy import func, select
 
 
 async def scheduled_scrape_loop() -> None:
@@ -80,3 +82,45 @@ async def stop_scheduler(task: asyncio.Task | None) -> None:
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task
+
+
+async def scheduled_market_rebuild_loop() -> None:
+    """Периодический полный пересчёт оценок рынка для всех листингов.
+
+    Срабатывает один раз при старте, если есть листинги без оценки (первый
+    деплой после миграции 0003 — все 11700 без market_basis), и далее раз в
+    settings.market_rebuild_interval_hours часов.
+
+    Зачем вообще: каждый upsert считает оценку сразу для изменённого
+    листинга, но соседи этого листинга не пересчитываются. Через неделю
+    накапливается drift — этот loop его рассасывает.
+    """
+    settings = get_settings()
+    interval_seconds = max(3600, settings.market_rebuild_interval_hours * 3600)
+
+    # Стартовая проверка: если есть листинги без оценки — пересчитываем
+    # сразу (этот случай покрывает первый деплой после добавления столбцов).
+    await asyncio.to_thread(_rebuild_if_any_pending)
+
+    while True:
+        await asyncio.sleep(interval_seconds)
+        await asyncio.to_thread(_rebuild_market_estimates)
+
+
+def _rebuild_if_any_pending() -> None:
+    with SessionLocal() as db:
+        pending = db.scalar(
+            select(func.count())
+            .select_from(Listing)
+            .where(Listing.status == "active", Listing.market_basis.is_(None))
+        )
+        if pending and pending > 0:
+            recompute_market_estimates(db)
+
+
+def _rebuild_market_estimates() -> None:
+    with SessionLocal() as db:
+        try:
+            recompute_market_estimates(db)
+        except Exception:  # pragma: no cover — не валим scheduler из-за rebuild
+            pass

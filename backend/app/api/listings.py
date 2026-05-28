@@ -22,13 +22,7 @@ from app.schemas.listing import (
 )
 from app.services.cma import build_cma
 from app.services.listings import listing_to_dict
-from app.services.market import (
-    MarketIndex,
-    build_market_index,
-    estimate_from_index,
-    estimate_market,
-)
-from app.services.segmentation import classify_segment
+from app.services.market import estimate_market
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -85,10 +79,10 @@ def get_listings(
     if source:
         stmt = stmt.where(Listing.source == source)
 
-    # Один индекс рынка на весь запрос — та же формула, что в /listings/stats.
-    index = build_market_index(db)
+    # Оценка рынка читается из столбцов листинга (заполняется в upsert
+    # и в ночном rebuild'е через [market_estimate.recompute_all]).
     all_listings = list(db.scalars(stmt).all())
-    items = [_build_item(listing, index) for listing in all_listings]
+    items = [_build_item(listing) for listing in all_listings]
 
     if discount_min is not None:
         items = [
@@ -118,16 +112,8 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
         select(
             Listing.source,
             Listing.district,
-            Listing.rooms,
-            Listing.building_key,
-            Listing.price_per_m2_usd,
-            Listing.area_m2,
             Listing.created_at,
-            Listing.title,
-            Listing.address_raw,
-            Listing.description,
-            Listing.floor,
-            Listing.total_floors,
+            Listing.discount_percent,
         ).where(
             Listing.status == "active",
             Listing.price_usd >= settings.min_listing_price_usd,
@@ -135,7 +121,6 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
         )
     ).all()
 
-    index = build_market_index(db)
     threshold = settings.below_market_threshold * 100
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
@@ -153,19 +138,7 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
         sources_total[row.source] += 1
         if row.district:
             districts_set.add(row.district)
-        segment = classify_segment(row.title, row.address_raw, row.description)
-        estimate = estimate_from_index(
-            index,
-            building_key=row.building_key,
-            district=row.district,
-            rooms=row.rooms,
-            area_m2=row.area_m2,
-            listing_price_per_m2=row.price_per_m2_usd,
-            segment=segment,
-            floor=row.floor,
-            total_floors=row.total_floors,
-        )
-        if estimate.discount_percent is None or estimate.discount_percent < threshold:
+        if row.discount_percent is None or row.discount_percent < threshold:
             continue
         hot += 1
         sources_hot[row.source] += 1
@@ -285,23 +258,21 @@ def get_market_estimate(
     return MarketEstimate(**estimate.__dict__)
 
 
-def _build_item(listing: Listing, index: MarketIndex) -> ListingOut:
-    segment = classify_segment(listing.title, listing.address_raw, listing.description)
-    estimate = estimate_from_index(
-        index,
-        building_key=listing.building_key,
-        district=listing.district,
-        rooms=listing.rooms,
-        area_m2=listing.area_m2,
-        listing_price_per_m2=listing.price_per_m2_usd,
-        segment=segment,
-        floor=listing.floor,
-        total_floors=listing.total_floors,
-    )
+def _build_item(listing: Listing) -> ListingOut:
     data = listing_to_dict(listing)
-    data["market"] = MarketEstimate(**estimate.__dict__)
+    if listing.market_basis or listing.market_price_per_m2_usd is not None:
+        data["market"] = MarketEstimate(
+            market_price_per_m2_usd=listing.market_price_per_m2_usd,
+            sample_size=listing.market_sample_size or 0,
+            basis=listing.market_basis or "insufficient_data",
+            confidence=listing.market_confidence or "low",
+            discount_percent=listing.discount_percent,
+            is_below_market=bool(listing.is_below_market),
+        )
+    else:
+        data["market"] = None
     return ListingOut(**data)
 
 
 def _with_market(db: Session, listing: Listing) -> ListingOut:
-    return _build_item(listing, build_market_index(db))
+    return _build_item(listing)

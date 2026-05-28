@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -38,5 +38,16 @@ class Listing(Base):
     duplicate_group_key: Mapped[str] = mapped_column(String(255), index=True)
     duplicate_count: Mapped[int] = mapped_column(Integer, default=1)
     source_urls: Mapped[str] = mapped_column(Text, default="[]")
+    # Кешированная оценка рынка. Обновляется в upsert и в ночном rebuild;
+    # API читает эти столбцы напрямую вместо живого пересчёта (11700 листингов
+    # × один SELECT — слишком долго на каждый запрос).
+    market_price_per_m2_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    market_basis: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    market_sample_size: Mapped[int] = mapped_column(Integer, default=0)
+    market_confidence: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    discount_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True, index=True)
+    is_below_market: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    savings_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    market_calculated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

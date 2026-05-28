@@ -9,6 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import Listing
+from app.services.listing_features import (
+    extract_material,
+    extract_micro_location,
+    extract_year,
+    floors_close,
+    years_close,
+)
+from app.services.segmentation import classify_segment, is_extreme_floor
 
 
 AREA_TOLERANCE = 0.15
@@ -44,7 +52,7 @@ class CmaStats:
 @dataclass
 class CmaResult:
     subject: CmaAnalog
-    basis: str  # "building" | "district"
+    basis: str  # "building" | "micro_location" | "district" | "district_relaxed" | "insufficient_data"
     basis_label: str
     area_tolerance_percent: float
     stats: CmaStats
@@ -85,9 +93,23 @@ def _stats(analogs: list[CmaAnalog]) -> CmaStats:
 
 
 def build_cma(db: Session, listing: Listing) -> CmaResult:
+    """Подбор аналогов с каскадом «дом → массив/ЖК → район».
+
+    Логика: район в Ташкенте идёт «лучами» от центра к краю — Феруза и Ц-1
+    формально в одном районе, но это разные рынки. Поэтому строгий матч идёт
+    по микро-локации (массив/ЖК/блок) с дополнительными фильтрами по сегменту,
+    материалу стен, этажу и году постройки. Если строгий пул пуст —
+    возвращаемся к району с ослабленными критериями, помечая базис.
+    """
     settings = get_settings()
     min_area = listing.area_m2 * (1 - AREA_TOLERANCE)
     max_area = listing.area_m2 * (1 + AREA_TOLERANCE)
+
+    subject_segment = classify_segment(listing.title, listing.address_raw, listing.description)
+    subject_material = extract_material(listing.title, listing.description)
+    subject_micro = extract_micro_location(listing.address_raw, listing.title, listing.description)
+    subject_year = extract_year(listing.title, listing.description)
+    subject_extreme = is_extreme_floor(listing.floor, listing.total_floors)
 
     base_filters = (
         Listing.status == "active",
@@ -99,20 +121,80 @@ def build_cma(db: Session, listing: Listing) -> CmaResult:
         Listing.id != listing.id,
     )
 
-    basis = "district"
-    basis_label = f"район {listing.district}, {listing.rooms}-комн., площадь ±15%"
+    pool: list[Listing] = list(db.scalars(select(Listing).where(*base_filters)).all())
+
+    def passes_strict(c: Listing) -> bool:
+        # Сегмент — всегда строго: новостройка и вторичка это разные рынки.
+        if classify_segment(c.title, c.address_raw, c.description) != subject_segment:
+            return False
+        # Материал — строго, только если у subject он распознан. У кандидата
+        # неизвестный материал не блокирует (нет данных != «другой материал»).
+        if subject_material:
+            c_material = extract_material(c.title, c.description)
+            if c_material and c_material != subject_material:
+                return False
+        # Крайние этажи (1/последний) и средние — структурно разные цены,
+        # не смешиваем. Внутри средних держим окно ±2 этажа.
+        if is_extreme_floor(c.floor, c.total_floors) != subject_extreme:
+            return False
+        if not floors_close(listing.floor, c.floor):
+            return False
+        # Год постройки → класс жилья. ±15 лет = «та же эпоха».
+        if not years_close(subject_year, extract_year(c.title, c.description)):
+            return False
+        return True
+
+    strict_pool = [c for c in pool if passes_strict(c)]
+
+    basis = "insufficient_data"
+    basis_label = "недостаточно данных для подбора аналогов"
     candidates: list[Listing] = []
 
     if listing.building_key:
-        stmt = select(Listing).where(*base_filters, Listing.building_key == listing.building_key)
-        candidates = list(db.scalars(stmt).all())
-        if candidates:
+        same_building = [c for c in strict_pool if c.building_key == listing.building_key]
+        if same_building:
+            candidates = same_building
             basis = "building"
-            basis_label = f"тот же дом ({listing.address_raw or listing.district}), {listing.rooms}-комн., площадь ±15%"
+            basis_label = (
+                f"тот же дом ({listing.address_raw or listing.district}), "
+                f"{listing.rooms}-комн., схожие параметры"
+            )
+
+    if not candidates and subject_micro:
+        same_micro = [
+            c
+            for c in strict_pool
+            if c.district == listing.district
+            and extract_micro_location(c.address_raw, c.title, c.description) == subject_micro
+        ]
+        if same_micro:
+            candidates = same_micro
+            basis = "micro_location"
+            basis_label = (
+                f"массив/ЖК «{subject_micro}», "
+                f"{listing.rooms}-комн., схожие параметры"
+            )
 
     if not candidates:
-        stmt = select(Listing).where(*base_filters, Listing.district == listing.district)
-        candidates = list(db.scalars(stmt).all())
+        same_district = [c for c in strict_pool if c.district == listing.district]
+        if same_district:
+            candidates = same_district
+            basis = "district"
+            basis_label = (
+                f"район {listing.district}, {listing.rooms}-комн., "
+                f"схожие параметры (сегмент/материал/этаж/год)"
+            )
+
+    if not candidates:
+        # Строгий пул пуст — берём район без доп. фильтров, помечаем флагом.
+        relaxed = [c for c in pool if c.district == listing.district]
+        if relaxed:
+            candidates = relaxed
+            basis = "district_relaxed"
+            basis_label = (
+                f"район {listing.district}, ослабленные критерии "
+                f"(точных аналогов не нашлось)"
+            )
 
     candidates.sort(key=lambda c: abs(c.area_m2 - listing.area_m2))
     candidates = candidates[:MAX_ANALOGS]

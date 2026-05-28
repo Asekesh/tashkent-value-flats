@@ -1,9 +1,13 @@
+from app.services.market_estimate import recompute_all as recompute_market
 from app.services.scrape import run_scrape
 
 
 def test_scrape_run_and_listing_filters(client, db_session):
     runs = run_scrape(db_session, source="all")
     assert {run.source for run in runs} == {"olx", "uybor", "realt24"}
+    # Полный пересчёт после скрейпа (в проде делается недельным rebuild loop'ом
+    # либо разовой CLI; в тесте дёргаем вручную, чтобы поймать дрейф соседей).
+    recompute_market(db_session)
 
     listings = client.get("/api/listings", params={"rooms": 2, "discount_min": 15})
     assert listings.status_code == 200
@@ -14,6 +18,7 @@ def test_scrape_run_and_listing_filters(client, db_session):
 
 def test_listing_detail_includes_market_estimate(client, db_session):
     run_scrape(db_session, source="all")
+    recompute_market(db_session)
     listings = client.get("/api/listings", params={"rooms": 2}).json()["items"]
     listing_id = listings[0]["id"]
 

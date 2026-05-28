@@ -20,7 +20,11 @@ from app.models import Listing  # noqa: F401
 from app.scrapers.registry import ADAPTERS, parse_fixture
 from app.services.listings import upsert_raw_listing
 from app.services.normalization import normalize_district
-from app.services.scheduler import scheduled_scrape_loop, stop_scheduler
+from app.services.scheduler import (
+    scheduled_market_rebuild_loop,
+    scheduled_scrape_loop,
+    stop_scheduler,
+)
 
 
 settings = get_settings()
@@ -39,10 +43,35 @@ def _ensure_trigger_columns() -> None:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN trigger VARCHAR(10) DEFAULT 'manual'"))
 
 
+def _ensure_market_columns() -> None:
+    """Бэкап на случай если миграция 0003 не прогналась (dev / старые env).
+    В проде это делает Alembic — здесь только safety net."""
+    inspector = inspect(engine)
+    if not inspector.has_table("listings"):
+        return
+    existing = {col["name"] for col in inspector.get_columns("listings")}
+    additions = (
+        ("market_price_per_m2_usd", "FLOAT"),
+        ("market_basis", "VARCHAR(40)"),
+        ("market_sample_size", "INTEGER DEFAULT 0 NOT NULL"),
+        ("market_confidence", "VARCHAR(10)"),
+        ("discount_percent", "FLOAT"),
+        ("is_below_market", "BOOLEAN DEFAULT 0 NOT NULL"),
+        ("savings_usd", "FLOAT"),
+        ("market_calculated_at", "DATETIME"),
+    )
+    with engine.begin() as conn:
+        for name, ddl in additions:
+            if name in existing:
+                continue
+            conn.execute(text(f"ALTER TABLE listings ADD COLUMN {name} {ddl}"))
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     _ensure_trigger_columns()
+    _ensure_market_columns()
     scheduler_task: asyncio.Task | None = None
     if settings.purge_fixture_listings_on_startup:
         with SessionLocal() as db:
@@ -74,8 +103,16 @@ async def lifespan(_: FastAPI):
                 db.commit()
     if settings.enable_scrape_scheduler and settings.allow_live_scraping:
         scheduler_task = asyncio.create_task(scheduled_scrape_loop())
+    # Запускаем market-rebuild loop всегда — он независим от скрейпа.
+    # Первый прогон срабатывает сразу если есть листинги без оценки (это
+    # покрывает первый деплой: все 11700 листингов получают market_basis
+    # за ~2 минуты в фоне, app при этом отвечает).
+    market_rebuild_task: asyncio.Task | None = asyncio.create_task(
+        scheduled_market_rebuild_loop()
+    )
     yield
     await stop_scheduler(scheduler_task)
+    await stop_scheduler(market_rebuild_task)
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

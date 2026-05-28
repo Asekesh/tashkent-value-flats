@@ -16,6 +16,9 @@ from app.services.normalization import (
     to_usd,
     utcnow,
 )
+# Импорт здесь, а не наверху — market_estimate сам импортирует cma → models;
+# держим как явный импорт чтобы не было сюрпризов при тестировании.
+from app.services.market_estimate import compute_and_store as _compute_market_estimate
 
 
 RELIST_GAP_DAYS = 3
@@ -32,6 +35,8 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
     group_key = duplicate_group_key(raw.district, raw.address_raw, raw.rooms, raw.area_m2, price_usd)
 
     duplicate = find_duplicate(db, group_key, raw.source, raw.source_id)
+    if duplicate is None:
+        duplicate = find_duplicate_by_flat(db, raw, price_usd)
     source_urls = [{"source": raw.source, "url": raw.url}]
 
     now = utcnow()
@@ -98,8 +103,6 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
                 "source": raw.source,
                 "source_id": raw.source_id,
             })
-        source_urls = merge_source_urls(loads_json(listing.source_urls, []), source_urls)
-        listing.duplicate_count = len(source_urls)
     else:
         listing = Listing(source=raw.source, source_id=raw.source_id, url=raw.url, duplicate_group_key=group_key)
         db.add(listing)
@@ -112,22 +115,37 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
             "source_id": raw.source_id,
         })
 
-    listing.title = raw.title
-    listing.price = raw.price
-    listing.currency = raw.currency
-    listing.price_usd = price_usd
-    listing.area_m2 = raw.area_m2
-    listing.price_per_m2_usd = ppm
-    listing.rooms = raw.rooms
-    listing.floor = raw.floor
-    listing.total_floors = raw.total_floors
-    listing.district = raw.district
-    listing.address_raw = raw.address_raw
-    listing.building_key = building_key
-    listing.description = raw.description
-    listing.photos = dumps_json(raw.photos)
-    listing.seller_type = raw.seller_type
-    listing.published_at = raw.published_at
+    # When the incoming row is a same-flat repost (matched via find_duplicate),
+    # only overwrite the canonical's displayed fields if it's a cheaper ask —
+    # the "ниже рынка" panel surfaces the best deal per flat, so the canonical
+    # should track the lowest price seen for it.
+    is_duplicate_branch = existing is None and duplicate is not None
+    incoming_is_cheaper = (
+        price_usd is not None
+        and (listing.price_usd is None or price_usd < listing.price_usd)
+    )
+    overwrite_canonical = not is_duplicate_branch or incoming_is_cheaper
+
+    if overwrite_canonical:
+        listing.source = raw.source
+        listing.source_id = raw.source_id
+        listing.url = raw.url
+        listing.title = raw.title
+        listing.price = raw.price
+        listing.currency = raw.currency
+        listing.price_usd = price_usd
+        listing.area_m2 = raw.area_m2
+        listing.price_per_m2_usd = ppm
+        listing.rooms = raw.rooms
+        listing.floor = raw.floor
+        listing.total_floors = raw.total_floors
+        listing.district = raw.district
+        listing.address_raw = raw.address_raw
+        listing.building_key = building_key
+        listing.description = raw.description
+        listing.photos = dumps_json(raw.photos)
+        listing.seller_type = raw.seller_type
+        listing.published_at = raw.published_at
     listing.seen_at = now
     listing.status = "active"
     listing.source_urls = dumps_json(merge_source_urls(loads_json(listing.source_urls, []), source_urls))
@@ -138,6 +156,13 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         for payload in events:
             db.add(ListingEvent(listing_id=listing.id, at=now, **payload))
 
+    # Считаем оценку рынка для этого листинга сразу: пеерс-выборка берётся
+    # из текущего состояния БД (других листингов в этом же скрейп-проходе).
+    # Полный пересчёт всей базы — в ночном batch'е, чтобы соседи перестроились
+    # друг под друга.
+    db.flush()
+    _compute_market_estimate(db, listing)
+
     return listing, is_new
 
 
@@ -146,6 +171,34 @@ def find_duplicate(db: Session, group_key: str, source: str, source_id: str) -> 
         select(Listing).where(
             Listing.duplicate_group_key == group_key,
             or_(Listing.source != source, Listing.source_id != source_id),
+        )
+    )
+
+
+# Width of the price window used to match the same flat reposted at a slightly
+# different ask. 5% is wide enough to absorb FX-rate drift and small bargaining
+# adjustments, tight enough that genuinely different flats don't merge.
+LOOSE_DEDUP_PRICE_TOLERANCE = 0.05
+
+
+def find_duplicate_by_flat(db: Session, raw: RawListing, price_usd: float) -> Listing | None:
+    """Same-source second-pass match for reposts that the hashed fingerprint
+    misses because title/address text drifted. Requires both floors to be
+    parsed so we don't over-merge listings with missing floor metadata."""
+    if raw.floor is None or raw.total_floors is None or not price_usd:
+        return None
+    price_lo = price_usd * (1 - LOOSE_DEDUP_PRICE_TOLERANCE)
+    price_hi = price_usd * (1 + LOOSE_DEDUP_PRICE_TOLERANCE)
+    return db.scalar(
+        select(Listing).where(
+            Listing.source == raw.source,
+            Listing.district == raw.district,
+            Listing.rooms == raw.rooms,
+            Listing.area_m2 == raw.area_m2,
+            Listing.floor == raw.floor,
+            Listing.total_floors == raw.total_floors,
+            Listing.price_usd.between(price_lo, price_hi),
+            or_(Listing.source != raw.source, Listing.source_id != raw.source_id),
         )
     )
 

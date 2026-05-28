@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     min_listing_price_usd: float = 5000.0
     min_listing_price_per_m2_usd: float = 100.0
     below_market_threshold: float = 0.15
+    # Полный пересчёт оценок рынка для всех листингов. Дрейф медиан за неделю
+    # на стабильном рынке Ташкента — единицы процентов, чаще не имеет смысла.
+    # Каждый upsert и так считает свою оценку сразу; этот rebuild ловит drift
+    # у листингов, чьи соседи изменились без них.
+    market_rebuild_interval_hours: int = 168  # 1 неделя
 
     # --- Auth (Telegram login + JWT session) ---
     telegram_bot_token: str = ""
