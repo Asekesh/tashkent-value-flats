@@ -493,7 +493,9 @@ function renderSourceStats() {
 function renderDistrictOptions() {
   const fromStats = state.stats?.districts ?? [];
   const fromListings = state.listings.map((item) => item.district).filter(Boolean);
-  const districts = [...new Set([...fromStats, ...fromListings])].sort();
+  const districts = [...new Set([...fromStats, ...fromListings])]
+    .filter((d) => d && d !== "Не указан")
+    .sort();
   districtMulti.setOptions(districts);
 }
 
@@ -507,6 +509,7 @@ const districtMulti = (() => {
   const optionsBox = root.querySelector("[data-multi-options]");
   const countEl = root.querySelector("[data-multi-count]");
   const clearBtn = root.querySelector("[data-multi-clear]");
+  const doneBtn = root.querySelector("[data-multi-done]");
 
   let allOptions = [];
   let selected = new Set();
@@ -587,6 +590,11 @@ const districtMulti = (() => {
     renderOptions();
     syncHidden();
     updateLabel();
+  });
+
+  doneBtn.addEventListener("click", () => {
+    setOpen(false);
+    fetchListings(readFilters(), 0);
   });
 
   document.addEventListener("click", (event) => {

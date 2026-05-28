@@ -1229,6 +1229,10 @@ select:focus {
   text-align: center;
 }
 
+.multi-select-done {
+  width: 100%;
+}
+
 .admin-grid {
   display: grid;
   gap: var(--sp-6);
