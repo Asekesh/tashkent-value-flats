@@ -57,7 +57,7 @@
     overlay.className = "reg-overlay";
     overlay.innerHTML =
       '<div class="reg-modal" role="dialog" aria-modal="true" aria-labelledby="regTitle">' +
-      '<button class="reg-close" type="button" aria-label="Закрыть">×</button>' +
+      '<button class="reg-close" type="button" aria-label="Закрыть"><svg class="ic" aria-hidden="true"><use href="#i-xmark"/></svg></button>' +
       '<h2 id="regTitle">Зарегистрируйтесь, чтобы пользоваться сервисом</h2>' +
       '<p class="reg-sub">Выдача открыта и без входа. Регистрация добавляет:</p>' +
       '<ul class="reg-features">' +

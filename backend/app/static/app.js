@@ -13,6 +13,7 @@ const defaultFilters = {
 };
 
 const PAGE_SIZE = 50;
+const icon = (name, cls) => `<svg class="ic${cls ? " " + cls : ""}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 const state = {
   view: "dashboard",
   listings: [],
@@ -134,7 +135,7 @@ async function stopScrape() {
   const button = document.querySelector("#stopScanButton");
   if (button) {
     button.disabled = true;
-    button.textContent = "■ Останавливаем...";
+    button.innerHTML = `${icon("stop")} Останавливаем...`;
   }
   statusEl.textContent = "Останавливаем парсинг...";
   try {
@@ -196,10 +197,10 @@ function showProgress(state) {
   if (stopButton) {
     if (state.stop_requested) {
       stopButton.disabled = true;
-      stopButton.textContent = "■ Останавливаем...";
+      stopButton.innerHTML = `${icon("stop")} Останавливаем...`;
     } else {
       stopButton.disabled = false;
-      stopButton.textContent = "■ Остановить";
+      stopButton.innerHTML = `${icon("stop")} Остановить`;
     }
   }
 }
@@ -209,7 +210,7 @@ function hideProgress() {
   const stopButton = document.querySelector("#stopScanButton");
   if (stopButton) {
     stopButton.disabled = false;
-    stopButton.textContent = "■ Остановить";
+    stopButton.innerHTML = `${icon("stop")} Остановить`;
   }
 }
 
@@ -240,7 +241,7 @@ function taskCard(task) {
           <span class="task-trigger ${trigger}">${triggerLabel}</span>
           <span class="task-status ${statusClass}">${spinner}${escapeHtml(statusLabel)}</span>
         </div>
-        <div class="task-card-meta"><span>◷</span><span>${escapeHtml(meta)}</span></div>
+        <div class="task-card-meta">${icon("clock")}<span>${escapeHtml(meta)}</span></div>
       </div>
       <div class="task-card-stats">
         <div><b>${formatNumber(task.pages_scanned)}</b><span>страниц</span></div>
@@ -424,7 +425,7 @@ function renderFavoritesList() {
   if (!favoritesListEl) return;
   favoritesListEl.innerHTML = state.favorites.length
     ? state.favorites.map((listing, index) => listingCard(listing, index + 1)).join("")
-    : emptyState("В избранном пусто", "Нажмите ♡ на карточке объявления, чтобы сохранить его сюда.");
+    : emptyState("В избранном пусто", "Нажмите на сердечко в карточке объявления, чтобы сохранить его сюда.");
   bindCards(favoritesListEl);
   const totalEl = document.querySelector("#favoritesTotal");
   if (totalEl) totalEl.textContent = formatNumber(state.favorites.length);
@@ -440,11 +441,11 @@ function renderFavoritesBadge() {
 function renderInsight() {
   const listing = state.listings.find((item) => item.id === state.selectedId);
   if (!listing) {
-    insightPanel.innerHTML = `<div class="section-title">↓ <span>Рыночный ориентир</span></div><p class="muted-text">Выберите объявление, чтобы увидеть детали оценки.</p>`;
+    insightPanel.innerHTML = `<div class="section-title">${icon("trending-down")} <span>Рыночный ориентир</span></div><p class="muted-text">Выберите объявление, чтобы увидеть детали оценки.</p>`;
     return;
   }
   insightPanel.innerHTML = `
-    <div class="section-title">↓ <span>Рыночный ориентир</span></div>
+    <div class="section-title">${icon("trending-down")} <span>Рыночный ориентир</span></div>
     <h3>${escapeHtml(listing.title)}</h3>
     <div class="large-price">$${money(listing.price_usd)}</div>
     <dl>
@@ -502,7 +503,7 @@ function listingCard(listing, rank) {
   const favorite = isFavorite(listing.id) ? " active" : "";
   return `
     <article class="listing-card${selected}" data-id="${listing.id}">
-      <div class="listing-media">${photo ? `<img src="${escapeAttr(photo)}" alt="${escapeAttr(listing.title)}" loading="lazy" />` : "▦"}</div>
+      <div class="listing-media">${photo ? `<img src="${escapeAttr(photo)}" alt="${escapeAttr(listing.title)}" loading="lazy" />` : icon("grid")}</div>
       <div class="listing-body">
         <div class="chips">
           <span class="rank">${rank}</span>
@@ -516,16 +517,16 @@ function listingCard(listing, rank) {
         <div class="listing-facts">
           <span>⌖ ${escapeHtml(listing.district)}</span>
           <span>□ ${listing.area_m2} м²</span>
-          <span>↓ $${money(listing.price_per_m2_usd)}/м²</span>
-          <span>◷ ${formatDate(listing.seen_at)}</span>
+          <span>${icon("trending-down")} $${money(listing.price_per_m2_usd)}/м²</span>
+          <span>${icon("clock")} ${formatDate(listing.seen_at)}</span>
         </div>
         <div class="listing-bottom">
           <div><strong>$${money(listing.price_usd)}</strong><span>рынок: ${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}/м²` : "мало данных"}</span></div>
           <div class="row-actions">
-            <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">♡</button>
-            <button class="btn btn-ghost" data-cma="${listing.id}" title="Сравнительный анализ" type="button">▤ Найти аналоги</button>
-            <button class="btn btn-ghost" data-history="${listing.id}" title="История объявления" type="button">◷ История</button>
-            <a class="btn btn-ghost" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">↗ Смотреть оригинал</a>
+            <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">${icon(favorite ? "heart-fill" : "heart")}</button>
+            <button class="btn btn-ghost" data-cma="${listing.id}" title="Сравнительный анализ" type="button">${icon("chart")} Найти аналоги</button>
+            <button class="btn btn-ghost" data-history="${listing.id}" title="История объявления" type="button">${icon("clock")} История</button>
+            <a class="btn btn-ghost" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">${icon("arrow-up-right")} Смотреть оригинал</a>
           </div>
         </div>
       </div>
@@ -562,12 +563,12 @@ function bindCards(root) {
     });
   });
   // Hotlinked photos from the source platforms can 403/404 (hotlink
-  // protection, expired URLs) — degrade gracefully to the ▦ placeholder
+  // protection, expired URLs) — degrade gracefully to the grid placeholder
   // instead of leaving a blank/broken image.
   root.querySelectorAll(".listing-media img").forEach((img) => {
     const fallback = () => {
       const media = img.closest(".listing-media");
-      if (media) media.textContent = "▦";
+      if (media) media.innerHTML = icon("grid");
     };
     if (img.complete && img.naturalWidth === 0) {
       fallback();
@@ -604,8 +605,8 @@ function showCmaModal(listing) {
             <p id="cmaSubjectTitle"></p>
           </div>
           <div class="cma-header-actions">
-            <button class="btn btn-ghost" id="cmaPrintButton" type="button" disabled>▤ PDF / Печать</button>
-            <button class="icon-button" id="cmaCloseButton" type="button" aria-label="Закрыть">×</button>
+            <button class="btn btn-ghost" id="cmaPrintButton" type="button" disabled>${icon("printer")} PDF / Печать</button>
+            <button class="icon-button" id="cmaCloseButton" type="button" aria-label="Закрыть">${icon("xmark")}</button>
           </div>
         </header>
         <div class="cma-body" id="cmaBody"></div>
@@ -619,7 +620,7 @@ function showCmaModal(listing) {
     overlay.querySelector("#cmaPrintButton").addEventListener("click", () => window.print());
   }
   overlay.querySelector("#cmaSubjectTitle").textContent = listing?.title ?? "";
-  overlay.querySelector("#cmaBody").innerHTML = `<div class="cma-loading">⟳ Подбираем аналоги...</div>`;
+  overlay.querySelector("#cmaBody").innerHTML = `<div class="cma-loading">${icon("refresh")} Подбираем аналоги...</div>`;
   overlay.querySelector("#cmaPrintButton").disabled = true;
   overlay.classList.add("active");
 }
@@ -728,7 +729,7 @@ function cmaTable(subject, analogs) {
           <td>$${money(a.price_usd)}</td>
           <td>$${money(a.price_per_m2_usd)}</td>
           <td class="${positive ? "diff-pos" : "diff-neg"}">${positive ? "+" : ""}${diff.toFixed(1)}%</td>
-          <td><a class="btn btn-ghost cma-table-link" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer">↗</a></td>
+          <td><a class="btn btn-ghost cma-table-link" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer">${icon("arrow-up-right")}</a></td>
         </tr>
       `;
     })
@@ -782,7 +783,7 @@ function showHistoryModal(listing) {
             <p id="historySubjectTitle"></p>
           </div>
           <div class="cma-header-actions">
-            <button class="icon-button" id="historyCloseButton" type="button" aria-label="Закрыть">×</button>
+            <button class="icon-button" id="historyCloseButton" type="button" aria-label="Закрыть">${icon("xmark")}</button>
           </div>
         </header>
         <div class="cma-body" id="historyBody"></div>
@@ -795,7 +796,7 @@ function showHistoryModal(listing) {
     overlay.querySelector("#historyCloseButton").addEventListener("click", closeHistory);
   }
   overlay.querySelector("#historySubjectTitle").textContent = listing?.title ?? "";
-  overlay.querySelector("#historyBody").innerHTML = `<div class="cma-loading">⟳ Загружаем историю...</div>`;
+  overlay.querySelector("#historyBody").innerHTML = `<div class="cma-loading">${icon("refresh")} Загружаем историю...</div>`;
   overlay.classList.add("active");
 }
 
@@ -869,7 +870,7 @@ function describeHistoryEvent(event) {
         title: "Впервые появилось",
         detail: event.new_price_usd ? `Стартовая цена: $${money(event.new_price_usd)}` : "",
         kind: "neutral",
-        icon: "◷",
+        icon: icon("clock"),
       };
     case "price_changed": {
       const drop = (event.old_price_usd ?? 0) > (event.new_price_usd ?? 0);
@@ -880,15 +881,15 @@ function describeHistoryEvent(event) {
         title: drop ? "Цена снижена" : "Цена повышена",
         detail: `$${money(event.old_price_usd)} → $${money(event.new_price_usd)}${diff != null ? ` (${diff > 0 ? "+" : ""}${diff.toFixed(1)}%)` : ""}`,
         kind: drop ? "good" : "bad",
-        icon: drop ? "↓" : "↑",
+        icon: icon(drop ? "trending-down" : "trending-up"),
       };
     }
     case "relisted":
-      return { title: "Перевыставлено", detail: "", kind: "warn", icon: "↻" };
+      return { title: "Перевыставлено", detail: "", kind: "warn", icon: icon("refresh") };
     case "delisted":
-      return { title: "Снято с продажи", detail: "", kind: "muted", icon: "×" };
+      return { title: "Снято с продажи", detail: "", kind: "muted", icon: icon("xmark") };
     default:
-      return { title: event.event_type, detail: "", kind: "neutral", icon: "◷" };
+      return { title: event.event_type, detail: "", kind: "neutral", icon: icon("clock") };
   }
 }
 
@@ -977,7 +978,7 @@ function isHotDeal(listing) {
 }
 
 function emptyState(title, body) {
-  return `<div class="empty-state"><div>▦</div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></div>`;
+  return `<div class="empty-state"><div>${icon("grid")}</div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></div>`;
 }
 
 function money(value) {

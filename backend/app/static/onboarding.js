@@ -12,13 +12,17 @@
   var STORAGE_KEY = "onboarding_seen";
   var keyHandler = null;
 
+  function iconSvg(name) {
+    return '<svg class="ic" aria-hidden="true"><use href="#i-' + (name || "sparkle") + '"/></svg>';
+  }
+
   function cardsHtml() {
     var items = window.SERVICE_FEATURES || [];
     return items
       .map(function (f) {
         return (
           '<li><span class="onb-ic">' +
-          (f.icon || "✦") +
+          iconSvg(f.icon) +
           "</span><b>" +
           f.title +
           "</b><span>" +
@@ -35,7 +39,7 @@
     overlay.className = "reg-overlay";
     overlay.innerHTML =
       '<div class="reg-modal onb-modal" role="dialog" aria-modal="true" aria-labelledby="onbTitle">' +
-      '<button class="reg-close" type="button" aria-label="Закрыть">×</button>' +
+      '<button class="reg-close" type="button" aria-label="Закрыть"><svg class="ic" aria-hidden="true"><use href="#i-xmark"/></svg></button>' +
       '<h2 id="onbTitle">Добро пожаловать</h2>' +
       '<p class="reg-sub">Сервис собирает квартиры Ташкента ниже рыночной цены — вот как это работает:</p>' +
       '<ul class="reg-features onb-grid">' +

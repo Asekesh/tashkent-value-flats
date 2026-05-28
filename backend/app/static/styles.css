@@ -152,6 +152,45 @@ button:disabled {
   opacity: 0.62;
 }
 
+/* ===== Icon system — SF Symbols-style inline SVG ===== */
+.icon-sprite {
+  height: 0;
+  position: absolute;
+  width: 0;
+}
+
+.ic {
+  display: inline-block;
+  fill: none;
+  flex: 0 0 auto;
+  height: 1.15em;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+  vertical-align: -0.18em;
+  width: 1.15em;
+}
+
+.ic-sm { height: 14px; width: 14px; }
+.ic-md { height: 18px; width: 18px; }
+.ic-lg { height: 22px; width: 22px; }
+.ic-xl { height: 26px; width: 26px; }
+
+/* Sections + buttons get a slightly larger icon for visual balance. */
+.section-title .ic { height: 18px; width: 18px; }
+.btn .ic,
+.icon-button .ic,
+.source-pill .ic { height: 16px; width: 16px; vertical-align: -0.22em; }
+.scroll-top .ic { height: 22px; width: 22px; vertical-align: middle; }
+.nav-item > span:first-child .ic { height: 18px; width: 18px; vertical-align: middle; }
+.metric-icon .ic { height: 24px; width: 24px; stroke-width: 1.75; vertical-align: middle; }
+.task-card-meta .ic,
+.listing-facts .ic { height: 13px; width: 13px; vertical-align: -0.18em; }
+.onb-ic .ic,
+.history-icon .ic { height: 15px; width: 15px; vertical-align: middle; }
+.empty-state .ic { color: var(--color-text-subtle); height: 40px; width: 40px; stroke-width: 1.4; }
+
 .app-shell {
   background: transparent;
   display: grid;
@@ -1520,6 +1559,13 @@ select:focus {
   padding: 40px;
 }
 
+.cma-loading .ic {
+  animation: task-spin 1.2s linear infinite;
+  color: var(--color-primary);
+  height: 18px;
+  width: 18px;
+}
+
 .cma-error {
   color: var(--color-danger);
 }
@@ -2017,15 +2063,17 @@ a.nav-item {
 
 .onb-ic {
   align-items: center;
-  background: #eff6ff;
+  background: linear-gradient(135deg, var(--color-primary-tint), var(--color-primary-soft));
   border-radius: var(--radius-md);
-  color: #2563eb;
+  box-shadow: inset 0 0 0 1px var(--color-primary-border);
+  color: var(--color-primary-hover);
   display: inline-flex;
+  flex: 0 0 auto;
   font-size: var(--fs-sm);
-  height: 26px;
+  height: 30px;
   justify-content: center;
-  margin-bottom: var(--sp-2);
-  width: 26px;
+  margin-bottom: var(--sp-3);
+  width: 30px;
 }
 
 .onb-modal .reg-later {
