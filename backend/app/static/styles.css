@@ -1906,6 +1906,21 @@ select:focus {
   padding: 0 var(--sp-4);
 }
 
+.cma-table-address {
+  color: var(--color-primary);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+}
+
+.cma-table-address:hover {
+  text-decoration: underline;
+}
+
+.cma-table-address:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .diff-pos {
   color: var(--color-danger);
   font-weight: var(--fw-bold);

@@ -720,16 +720,20 @@ function cmaTable(subject, analogs) {
     .map((a) => {
       const diff = ((subject.price_per_m2_usd / a.price_per_m2_usd - 1) * 100);
       const positive = diff > 0;
+      const addressText = escapeHtml(a.address_raw || a.title || "—");
+      const addressCell = a.url
+        ? `<a class="cma-table-address" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer">${addressText}</a>`
+        : addressText;
       return `
         <tr>
           <td>${escapeHtml(sourceLabel(a.source))}</td>
-          <td>${escapeHtml(a.address_raw || "—")}</td>
+          <td>${addressCell}</td>
           <td>${a.area_m2} м²</td>
           <td>${a.floor ?? "—"}</td>
           <td>$${money(a.price_usd)}</td>
           <td>$${money(a.price_per_m2_usd)}</td>
           <td class="${positive ? "diff-pos" : "diff-neg"}">${positive ? "+" : ""}${diff.toFixed(1)}%</td>
-          <td><a class="btn btn-ghost cma-table-link" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer">${icon("arrow-up-right")}</a></td>
+          <td><a class="btn btn-ghost cma-table-link" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer">${icon("arrow-up-right")} Открыть</a></td>
         </tr>
       `;
     })
