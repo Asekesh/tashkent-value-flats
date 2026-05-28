@@ -1152,6 +1152,10 @@ select:focus {
   z-index: 20;
 }
 
+.multi-select-panel[hidden] {
+  display: none;
+}
+
 .multi-select-search {
   height: 36px;
 }
