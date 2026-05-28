@@ -23,21 +23,20 @@ from app.services.market_estimate import compute_and_store as _compute_market_es
 
 RELIST_GAP_DAYS = 3
 # Источники (OLX/Uybor) показывают USD-эквивалент UZS-цены по своему живому курсу,
-# поэтому при каждом скрейпе цена «дрожит» на десятки долларов / десятые доли процента
-# без реальных действий продавца. Считаем изменение цены значимым, только если
-# превышены оба порога: и относительный, и абсолютный.
-PRICE_CHANGE_MIN_PCT = 0.005  # 0.5%
-PRICE_CHANGE_MIN_USD = 200.0
+# поэтому при каждом скрейпе цена «дрожит» на десятые доли процента без реальных
+# действий продавца. Пишем событие price_changed только на СНИЖЕНИЯ цены строго
+# больше 0.2%: повышения почти всегда либо курсовой шум, либо переоценка хозяином
+# (нам интереснее торг вниз, а не вверх).
+PRICE_CHANGE_MIN_PCT = 0.002  # > 0.2%
 DELIST_THRESHOLD_DAYS = 3
 
 
 def _is_significant_price_change(prev: float | None, new: float | None) -> bool:
     if prev is None or new is None or prev <= 0:
         return False
-    delta = abs(new - prev)
-    if delta < PRICE_CHANGE_MIN_USD:
+    if new >= prev:
         return False
-    return (delta / prev) >= PRICE_CHANGE_MIN_PCT
+    return ((prev - new) / prev) > PRICE_CHANGE_MIN_PCT
 
 
 def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
