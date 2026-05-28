@@ -25,6 +25,8 @@ const state = {
   sourceStats: [],
   stats: { total: 0, hot: 0, new_today: 0, sources: [] },
   dashboardSource: "",
+  cmaResult: null,
+  cmaSort: { key: null, dir: 1 },
 };
 
 const filterIds = Object.keys(defaultFilters);
@@ -580,11 +582,14 @@ function bindCards(root) {
 
 async function openCma(listingId) {
   const listing = state.listings.find((item) => item.id === listingId);
+  state.cmaResult = null;
+  state.cmaSort = { key: null, dir: 1 };
   showCmaModal(listing);
   try {
     const response = await fetch(`/api/cma/${listingId}`);
     if (!response.ok) throw new Error("cma_failed");
     const result = await response.json();
+    state.cmaResult = result;
     renderCmaBody(result);
   } catch {
     renderCmaError("Не удалось загрузить аналоги");
@@ -675,6 +680,69 @@ function renderCmaBody(result) {
     ${tableHtml}
     ${emptyHtml}
   `;
+
+  body.querySelectorAll(".cma-table th[data-sort]").forEach((th) => {
+    const activate = () => {
+      const key = th.dataset.sort;
+      if (state.cmaSort.key === key) {
+        state.cmaSort.dir = -state.cmaSort.dir;
+      } else {
+        state.cmaSort = { key, dir: key === "source" || key === "address" ? 1 : -1 };
+      }
+      if (state.cmaResult) renderCmaBody(state.cmaResult);
+    };
+    th.addEventListener("click", activate);
+    th.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        activate();
+      }
+    });
+  });
+}
+
+const CMA_SORT_COLUMNS = [
+  { key: "source", label: "Источник" },
+  { key: "address", label: "Адрес" },
+  { key: "area", label: "Площадь" },
+  { key: "floor", label: "Этаж" },
+  { key: "price", label: "Цена" },
+  { key: "ppm", label: "$/м²" },
+  { key: "diff", label: "vs объект" },
+];
+
+function cmaSortValue(a, subject, key) {
+  switch (key) {
+    case "source":
+      return (a.source || "").toString().toLowerCase();
+    case "address":
+      return (a.address_raw || a.title || "").toString().toLowerCase();
+    case "area":
+      return a.area_m2 ?? 0;
+    case "floor":
+      return a.floor ?? -Infinity;
+    case "price":
+      return a.price_usd ?? 0;
+    case "ppm":
+      return a.price_per_m2_usd ?? 0;
+    case "diff":
+      return a.price_per_m2_usd ? subject.price_per_m2_usd / a.price_per_m2_usd - 1 : 0;
+    default:
+      return 0;
+  }
+}
+
+function sortAnalogs(analogs, subject, sort) {
+  if (!sort || !sort.key) return analogs;
+  const dir = sort.dir >= 0 ? 1 : -1;
+  return [...analogs].sort((a, b) => {
+    const av = cmaSortValue(a, subject, sort.key);
+    const bv = cmaSortValue(b, subject, sort.key);
+    if (typeof av === "string" || typeof bv === "string") {
+      return String(av).localeCompare(String(bv), "ru") * dir;
+    }
+    return (av - bv) * dir;
+  });
 }
 
 function cmaChart(subject, analogs, median) {
@@ -716,7 +784,9 @@ function cmaChart(subject, analogs, median) {
 }
 
 function cmaTable(subject, analogs) {
-  const rows = analogs
+  const sort = state.cmaSort || { key: null, dir: 1 };
+  const sorted = sortAnalogs(analogs, subject, sort);
+  const rows = sorted
     .map((a) => {
       const diff = ((subject.price_per_m2_usd / a.price_per_m2_usd - 1) * 100);
       const positive = diff > 0;
@@ -738,11 +808,19 @@ function cmaTable(subject, analogs) {
       `;
     })
     .join("");
+  const headers = CMA_SORT_COLUMNS
+    .map((col) => {
+      const active = sort.key === col.key;
+      const arrow = active ? (sort.dir >= 0 ? " ▲" : " ▼") : "";
+      const ariaSort = active ? (sort.dir >= 0 ? "ascending" : "descending") : "none";
+      return `<th class="cma-th-sort${active ? " active" : ""}" data-sort="${col.key}" aria-sort="${ariaSort}" tabindex="0">${col.label}${arrow}</th>`;
+    })
+    .join("");
   return `
     <section class="cma-table-wrap">
-      <h3>Аналоги (${analogs.length})</h3>
+      <h3>Аналоги (${sorted.length})</h3>
       <table class="cma-table">
-        <thead><tr><th>Источник</th><th>Адрес</th><th>Площадь</th><th>Этаж</th><th>Цена</th><th>$/м²</th><th>vs объект</th><th></th></tr></thead>
+        <thead><tr>${headers}<th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </section>
