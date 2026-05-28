@@ -491,13 +491,142 @@ function renderSourceStats() {
 }
 
 function renderDistrictOptions() {
-  const select = document.querySelector("#district");
-  const current = select.value;
   const fromStats = state.stats?.districts ?? [];
   const fromListings = state.listings.map((item) => item.district).filter(Boolean);
   const districts = [...new Set([...fromStats, ...fromListings])].sort();
-  select.innerHTML = `<option value="">Все районы</option>${districts.map((district) => `<option value="${escapeAttr(district)}">${escapeHtml(district)}</option>`).join("")}`;
-  select.value = districts.includes(current) ? current : "";
+  districtMulti.setOptions(districts);
+}
+
+const districtMulti = (() => {
+  const root = document.querySelector("#districtMulti");
+  const hidden = document.querySelector("#district");
+  const trigger = root.querySelector("[data-multi-trigger]");
+  const label = root.querySelector("[data-multi-label]");
+  const panel = root.querySelector("[data-multi-panel]");
+  const search = root.querySelector("[data-multi-search]");
+  const optionsBox = root.querySelector("[data-multi-options]");
+  const countEl = root.querySelector("[data-multi-count]");
+  const clearBtn = root.querySelector("[data-multi-clear]");
+
+  let allOptions = [];
+  let selected = new Set();
+  let query = "";
+
+  function selectedList() {
+    return [...selected];
+  }
+
+  function syncHidden() {
+    hidden.value = selectedList().join(",");
+    hidden.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function updateLabel() {
+    const count = selected.size;
+    if (count === 0) {
+      label.textContent = "Все районы";
+      label.classList.remove("has-value");
+    } else if (count === 1) {
+      label.textContent = selectedList()[0];
+      label.classList.add("has-value");
+    } else {
+      label.textContent = `${count} ${pluralRu(count, ["район", "района", "районов"])}`;
+      label.classList.add("has-value");
+    }
+    countEl.textContent = count ? `Выбрано: ${count}` : "";
+  }
+
+  function renderOptions() {
+    const q = query.trim().toLowerCase();
+    const matched = q ? allOptions.filter((d) => d.toLowerCase().includes(q)) : allOptions;
+    if (!matched.length) {
+      optionsBox.innerHTML = `<p class="multi-select-empty">Нет совпадений</p>`;
+      return;
+    }
+    optionsBox.innerHTML = matched.map((d) => {
+      const checked = selected.has(d) ? " checked" : "";
+      return `<label class="multi-select-option"><input type="checkbox" value="${escapeAttr(d)}"${checked} /><span>${escapeHtml(d)}</span></label>`;
+    }).join("");
+  }
+
+  function setOpen(open) {
+    panel.hidden = !open;
+    trigger.setAttribute("aria-expanded", String(open));
+    root.classList.toggle("open", open);
+    if (open) {
+      renderOptions();
+      setTimeout(() => search.focus(), 0);
+    } else {
+      query = "";
+      search.value = "";
+    }
+  }
+
+  trigger.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setOpen(panel.hidden);
+  });
+
+  search.addEventListener("input", () => {
+    query = search.value;
+    renderOptions();
+  });
+
+  optionsBox.addEventListener("change", (event) => {
+    const input = event.target;
+    if (input.matches('input[type="checkbox"]')) {
+      if (input.checked) selected.add(input.value);
+      else selected.delete(input.value);
+      syncHidden();
+      updateLabel();
+    }
+  });
+
+  clearBtn.addEventListener("click", () => {
+    selected.clear();
+    renderOptions();
+    syncHidden();
+    updateLabel();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!root.contains(event.target) && !panel.hidden) setOpen(false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !panel.hidden) setOpen(false);
+  });
+
+  return {
+    setOptions(list) {
+      allOptions = list;
+      const known = new Set(list);
+      [...selected].forEach((d) => {
+        if (!known.has(d)) selected.delete(d);
+      });
+      if (!panel.hidden) renderOptions();
+      updateLabel();
+      syncHidden();
+    },
+    getValue() {
+      return selectedList().join(",");
+    },
+    setValue(value) {
+      const list = String(value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      selected = new Set(list);
+      if (!panel.hidden) renderOptions();
+      updateLabel();
+      hidden.value = selectedList().join(",");
+    },
+  };
+})();
+
+function pluralRu(n, forms) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
+  return forms[2];
 }
 
 function listingCard(listing, rank) {
@@ -1038,7 +1167,12 @@ function readFilters() {
 
 function writeFilters(filters) {
   filterIds.forEach((id) => {
-    document.querySelector(`#${id}`).value = filters[id] ?? "";
+    const value = filters[id] ?? "";
+    if (id === "district") {
+      districtMulti.setValue(value);
+    } else {
+      document.querySelector(`#${id}`).value = value;
+    }
   });
 }
 

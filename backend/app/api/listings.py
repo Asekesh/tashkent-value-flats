@@ -59,7 +59,11 @@ def get_listings(
         Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
     )
     if district:
-        stmt = stmt.where(Listing.district == district)
+        districts = [d.strip() for d in district.split(",") if d.strip()]
+        if len(districts) == 1:
+            stmt = stmt.where(Listing.district == districts[0])
+        elif districts:
+            stmt = stmt.where(Listing.district.in_(districts))
     if rooms:
         stmt = stmt.where(Listing.rooms == rooms)
     if area_min is not None:

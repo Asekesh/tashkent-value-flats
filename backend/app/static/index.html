@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ташкент Недвижимость</title>
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260528-floor1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260528-multidistrict" />
   </head>
   <body>
     <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" focusable="false">
@@ -157,7 +157,24 @@
           <section class="filter-panel">
             <div class="section-title"><svg class="ic"><use href="#i-sliders"/></svg> <span>Фильтры и сортировка</span></div>
             <div class="filter-grid">
-              <label>Район<select id="district"><option value="">Все районы</option></select></label>
+              <div class="filter-field">
+                <span class="filter-field-label">Район</span>
+                <div id="districtMulti" class="multi-select" data-multi-select>
+                  <input type="hidden" id="district" value="" />
+                  <button type="button" class="multi-select-trigger" data-multi-trigger aria-haspopup="listbox" aria-expanded="false">
+                    <span class="multi-select-label" data-multi-label>Все районы</span>
+                    <svg class="ic multi-select-caret" aria-hidden="true"><use href="#i-arrow-right"/></svg>
+                  </button>
+                  <div class="multi-select-panel" data-multi-panel hidden>
+                    <input type="search" class="multi-select-search" data-multi-search placeholder="Поиск района..." aria-label="Поиск района" />
+                    <div class="multi-select-actions">
+                      <button type="button" class="multi-select-link" data-multi-clear>Снять все</button>
+                      <span class="multi-select-count" data-multi-count></span>
+                    </div>
+                    <div class="multi-select-options" data-multi-options role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                </div>
+              </div>
               <label>Комнаты<select id="rooms"><option value="">Любая</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5+</option></select></label>
               <label>Источник<select id="source"><option value="">Все</option><option value="olx">OLX</option><option value="uybor">Uybor</option><option value="realt24">Realt24</option></select></label>
               <label>Сортировка<select id="sort"><option value="discount">По скидке</option><option value="price_per_m2">По цене за м²</option><option value="fresh">По дате</option><option value="price">По цене</option></select></label>
@@ -249,7 +266,7 @@
       </div>
     </main>
     <button id="scrollTopButton" class="scroll-top" type="button" aria-label="Наверх" hidden><svg class="ic"><use href="#i-arrow-up"/></svg></button>
-    <script src="/static/app.js?v=20260528-floor1"></script>
+    <script src="/static/app.js?v=20260528-multidistrict"></script>
     <script src="/static/service-features.js?v=20260528-cma-sort2"></script>
     <script src="/static/reg-gate.js?v=20260528-mobile3"></script>
     <script src="/static/onboarding.js?v=20260528-mobile3"></script>
