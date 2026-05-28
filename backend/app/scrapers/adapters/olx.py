@@ -22,9 +22,16 @@ class ListingProbe:
     ``is_gone=True`` means the listing no longer counts as live: page returned
     404/410, or the embedded ad state says the ad is archived/inactive (OLX
     keeps a stub page up after archiving and just flips ``isActive`` to false).
+
+    ``usd_price`` is the seller's authoritative у.е.-priced (USD-equivalent)
+    ask if the detail page exposes it. Search-page JSON-LD always reports the
+    UZS-converted equivalent at OLX's live rate, so listings priced in у.е.
+    round-trip through a stale FX rate when we re-divide by ``USD_TO_UZS``;
+    when the seller's actual currency is у.е., trust that value directly.
     """
     is_gone: bool
     photos: list[str]
+    usd_price: float | None = None
 
 
 class OlxAdapter(SourceAdapter):
@@ -84,15 +91,16 @@ class OlxAdapter(SourceAdapter):
     def parse_live_page(self, html: str) -> list[RawListing]:
         soup = BeautifulSoup(html, "html.parser")
         photo_map = _extract_prerendered_photos(html)
+        param_map = _extract_prerendered_params(html)
         listings: list[RawListing] = []
         seen: set[str] = set()
         for offer in _extract_jsonld_offers(soup):
-            raw = _offer_to_raw_listing(offer)
+            raw = _offer_to_raw_listing(offer, param_map)
             if raw and raw.source_id not in seen:
                 listings.append(raw)
                 seen.add(raw.source_id)
         for card in soup.select("[data-cy=l-card]"):
-            raw = _card_to_raw_listing(card)
+            raw = _card_to_raw_listing(card, param_map)
             if raw and raw.source_id not in seen:
                 listings.append(raw)
                 seen.add(raw.source_id)
@@ -115,7 +123,11 @@ class OlxAdapter(SourceAdapter):
         response.raise_for_status()
         if _detail_is_archived(response.text):
             return ListingProbe(is_gone=True, photos=[])
-        return ListingProbe(is_gone=False, photos=_extract_detail_photos(response.text))
+        return ListingProbe(
+            is_gone=False,
+            photos=_extract_detail_photos(response.text),
+            usd_price=_extract_detail_usd_price(response.text),
+        )
 
     def fetch_listing_photos(self, url: str, client: httpx.Client) -> list[str] | None:
         """Back-compat wrapper around :meth:`probe_listing`."""
@@ -192,6 +204,117 @@ def _detail_is_archived(html: str) -> bool:
     return False
 
 
+def _extract_prerendered_params(html: str) -> dict[str, dict]:
+    """Per-ad structured params (floor, total_floors, area, rooms) from the
+    embedded listing state.
+
+    OLX cards' free-form titles routinely omit ``этаж/планировка/площадь`` —
+    those values live as structured ``params`` on the ad object. Pulling them
+    here lets the JSON-LD / HTML extractors fill in fields that the title
+    regex misses, instead of dropping listings or storing ``floor=None``.
+    """
+    data = _load_prerendered_state(html)
+    if data is None:
+        return {}
+    ads = data.get("listing", {}).get("listing", {}).get("ads")
+    if not isinstance(ads, list):
+        return {}
+    param_map: dict[str, dict] = {}
+    for ad in ads:
+        if not isinstance(ad, dict):
+            continue
+        flat = _flatten_params(ad.get("params"))
+        info = {
+            "floor": _int_or_none(flat.get("floor")),
+            "total_floors": _int_or_none(flat.get("total_floors")),
+            "area_m2": _float_or_none(flat.get("total_area")),
+            "rooms": _int_or_none(flat.get("number_of_rooms")),
+        }
+        if not any(value is not None for value in info.values()):
+            continue
+        if ad.get("id") is not None:
+            param_map[str(ad["id"])] = info
+        url = compact_text(ad.get("url"))
+        if url:
+            param_map[_source_id_from_url(url)] = info
+    return param_map
+
+
+def _flatten_params(params) -> dict[str, str]:
+    """Reduce OLX's ``[{key, value, normalizedValue}, ...]`` to ``{key: value}``,
+    preferring ``normalizedValue`` (already trimmed/coerced) when present."""
+    out: dict[str, str] = {}
+    if not isinstance(params, list):
+        return out
+    for item in params:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("key")
+        if not key:
+            continue
+        value = item.get("normalizedValue")
+        if value in (None, "", []):
+            value = item.get("value")
+        if isinstance(value, list):
+            value = value[0] if value else None
+        if value is not None:
+            out[str(key)] = str(value).strip()
+    return out
+
+
+def _int_or_none(value) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(float(str(value).replace(",", ".")))
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_none(value) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_detail_usd_price(html: str) -> float | None:
+    """Seller's у.е. (USD-equivalent) ask from the detail page.
+
+    Sellers can list in сум or у.е.; OLX preserves the original currency on
+    the detail page's ``ad.price.regularPrice``. Search-page JSON-LD always
+    re-converts to UZS at OLX's live rate (typically ~12 000 UZS/USD), so
+    re-dividing by our fixed ``USD_TO_UZS=12 700`` adds a ~5% downward bias
+    for у.е.-priced ads. When the seller's currency *is* у.е., trust the
+    detail-page value verbatim instead of round-tripping.
+    """
+    data = _load_prerendered_state(html)
+    if data is None:
+        return None
+    ad = data.get("ad")
+    if isinstance(ad, dict):
+        ad = ad.get("ad", ad)
+    if not isinstance(ad, dict):
+        return None
+    price = ad.get("price")
+    if not isinstance(price, dict):
+        return None
+    regular = price.get("regularPrice")
+    if not isinstance(regular, dict):
+        return None
+    currency = (regular.get("currencyCode") or "").upper()
+    symbol = regular.get("currencySymbol") or ""
+    is_uye = currency == "UYE" or "у.е" in symbol.lower()
+    if not is_uye:
+        return None
+    value = _float_or_none(regular.get("value"))
+    if value is None or value <= 0:
+        return None
+    return round(value, 2)
+
+
 def _extract_detail_photos(html: str) -> list[str]:
     """Photos from a single listing's detail page (``ad.ad.photos`` in the
     ``__PRERENDERED_STATE__`` blob). Used to backfill listings that dropped out
@@ -226,19 +349,24 @@ def _extract_jsonld_offers(soup: BeautifulSoup) -> list[dict]:
     return offers
 
 
-def _offer_to_raw_listing(offer: dict) -> RawListing | None:
+def _offer_to_raw_listing(offer: dict, param_map: dict[str, dict] | None = None) -> RawListing | None:
     title = compact_text(offer.get("name"))
     url = compact_text(offer.get("url"))
     price = offer.get("price")
     if not title or not url or not isinstance(price, (int, float)):
         return None
-    area_m2 = _extract_area(title)
-    rooms = _extract_rooms(title)
+    source_id = _source_id_from_url(url)
+    params = (param_map or {}).get(source_id) or {}
+    area_m2 = _extract_area(title) or params.get("area_m2")
+    rooms = _extract_rooms(title) or params.get("rooms")
     if not area_m2 or not rooms:
         return None
     floor, total_floors = _extract_floor(title)
+    if floor is None:
+        floor = params.get("floor")
+    if total_floors is None:
+        total_floors = params.get("total_floors")
     district = normalize_district(_extract_area_served(offer))
-    source_id = _source_id_from_url(url)
     photos = offer.get("image") if isinstance(offer.get("image"), list) else []
     return RawListing(
         source="olx",
@@ -275,7 +403,7 @@ _CURRENCY_MAP = {
 }
 
 
-def _card_to_raw_listing(card) -> RawListing | None:
+def _card_to_raw_listing(card, param_map: dict[str, dict] | None = None) -> RawListing | None:
     title_el = card.select_one('[data-cy="ad-card-title"] h4, [data-testid="ad-card-title"] h4, h4, h6')
     link_el = card.select_one('a[href]')
     price_el = card.select_one('[data-testid="ad-price"], [data-testid="ad-price-text"]')
@@ -290,16 +418,21 @@ def _card_to_raw_listing(card) -> RawListing | None:
     price_value, currency = _parse_price(price_el.get_text(" "))
     if price_value is None:
         return None
-    area_m2 = _extract_area(title)
-    rooms = _extract_rooms(title)
-    if not area_m2 or not rooms:
-        return None
-    floor, total_floors = _extract_floor(title)
-    location_text = compact_text(location_el.get_text(" ")) if location_el else ""
-    district = normalize_district(_district_from_location(location_text))
     # URL slug, not card `id` attr — keep id format aligned with JSON-LD path
     # so the in-page `seen` set dedupes the same ad across both extractors.
     source_id = _source_id_from_url(url)
+    params = (param_map or {}).get(source_id) or {}
+    area_m2 = _extract_area(title) or params.get("area_m2")
+    rooms = _extract_rooms(title) or params.get("rooms")
+    if not area_m2 or not rooms:
+        return None
+    floor, total_floors = _extract_floor(title)
+    if floor is None:
+        floor = params.get("floor")
+    if total_floors is None:
+        total_floors = params.get("total_floors")
+    location_text = compact_text(location_el.get_text(" ")) if location_el else ""
+    district = normalize_district(_district_from_location(location_text))
     photo_el = card.select_one("img")
     photos: list[str] = []
     if photo_el:

@@ -165,9 +165,29 @@ def _merge_cluster(
     for extra in extras:
         urls = merge_source_urls(urls, loads_json(extra.source_urls, []))
     if not dry_run:
+        # Carry over factual fields the canonical happens to be missing —
+        # OLX cards routinely include ``этаж`` on one repost and omit it on
+        # another, and the cheaper-ask pick that wins canonical is often the
+        # one with the sparser title. Photos likewise: keep whatever's there.
+        for field in ("floor", "total_floors"):
+            if getattr(canonical, field) is None:
+                for extra in extras:
+                    value = getattr(extra, field)
+                    if value is not None:
+                        setattr(canonical, field, value)
+                        break
+        if not _has_photos_json(canonical.photos):
+            for extra in extras:
+                if _has_photos_json(extra.photos):
+                    canonical.photos = extra.photos
+                    break
         canonical.source_urls = dumps_json(urls)
         canonical.duplicate_count = max(1, len(urls))
         canonical.updated_at = datetime.utcnow()
         for extra in extras:
             db.delete(extra)
     return canonical, extras
+
+
+def _has_photos_json(raw: str | None) -> bool:
+    return bool(raw) and raw not in ("[]", "")

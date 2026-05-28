@@ -20,6 +20,7 @@ from datetime import datetime
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.orm import object_session
 
 from app.db.session import SessionLocal
 from app.models import Listing, ListingEvent
@@ -41,6 +42,7 @@ class SweepState:
     processed: int = 0
     archived: int = 0
     photos_filled: int = 0
+    prices_fixed: int = 0
     failed: int = 0
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -133,10 +135,14 @@ def _worker(delay_seconds: float) -> None:
                     )
                     with _lock:
                         _state.archived += 1
-                elif probe.photos and not _has_photos(listing.photos):
-                    listing.photos = dumps_json(probe.photos)
-                    with _lock:
-                        _state.photos_filled += 1
+                else:
+                    if probe.photos and not _has_photos(listing.photos):
+                        listing.photos = dumps_json(probe.photos)
+                        with _lock:
+                            _state.photos_filled += 1
+                    if _apply_usd_price(listing, probe.usd_price, now):
+                        with _lock:
+                            _state.prices_fixed += 1
                 with _lock:
                     _state.processed += 1
                 if index % _COMMIT_EVERY == 0:
@@ -154,3 +160,52 @@ def _worker(delay_seconds: float) -> None:
 
 def _has_photos(raw: str | None) -> bool:
     return bool(raw) and raw not in ("[]", "")
+
+
+# Floor for "the у.е.-price is materially different from what we stored"
+# decisions. ≥1% diff filters out rounding while still catching the 5–7%
+# bias that the OLX-live-rate ↔ fixed-12 700-rate round trip introduces.
+_PRICE_FIX_TOLERANCE = 0.01
+
+
+def _apply_usd_price(listing: Listing, usd_price: float | None, now: datetime) -> bool:
+    """Override the search-page-derived UZS→USD price with the seller's
+    authoritative у.е. ask from the detail page.
+
+    Search-page JSON-LD always reports UZS at OLX's live rate; we then divide
+    by the fixed ``USD_TO_UZS``, so у.е.-priced ads come out 5–7% off. The
+    detail page preserves the original currency, so when ``ListingProbe`` says
+    "this ad is у.е.", trust that value and rewrite price / currency / ppm.
+    Logs a ``price_changed`` event only on real drops (>0.2% — mirrors the
+    upsert-time rule that filters out FX-noise and seller bumps).
+    """
+    if usd_price is None or usd_price <= 0:
+        return False
+    prev_usd = listing.price_usd
+    if prev_usd is not None and abs(prev_usd - usd_price) / prev_usd < _PRICE_FIX_TOLERANCE:
+        return False
+    listing.price = usd_price
+    listing.currency = "USD"
+    listing.price_usd = usd_price
+    if listing.area_m2 and listing.area_m2 > 0:
+        listing.price_per_m2_usd = round(usd_price / listing.area_m2, 2)
+    session = object_session(listing)
+    if (
+        session is not None
+        and prev_usd is not None
+        and usd_price < prev_usd
+        and (prev_usd - usd_price) / prev_usd > 0.002
+    ):
+        session.add(
+            ListingEvent(
+                listing_id=listing.id,
+                event_type="price_changed",
+                old_price_usd=prev_usd,
+                new_price_usd=usd_price,
+                source="olx",
+                source_id=listing.source_id,
+                note="Detail-page sweep: у.е.-цена уточнена с продавцом",
+                at=now,
+            )
+        )
+    return True
