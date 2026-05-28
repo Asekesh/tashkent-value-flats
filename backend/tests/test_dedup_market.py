@@ -83,23 +83,79 @@ def test_same_flat_reposted_with_price_drift_merges(db_session):
     assert duplicate.duplicate_count == 2
 
 
-def test_loose_dedup_skips_when_floors_unknown(db_session):
-    # Same district/area/rooms/price but no floor info — too risky to merge.
-    base = dict(
+def test_loose_dedup_merges_when_floor_missing_on_repost(db_session):
+    # OLX repost with the floor field stripped. Same district/rooms/area and
+    # price inside ±5% — under the relaxed scrape-time match, None floor is
+    # treated as wildcard against the existing known floor.
+    first = RawListing(
         source="olx",
-        url="https://olx.test/x",
-        title="2-комн",
+        source_id="aaa",
+        url="https://olx.test/aaa",
+        title="2-комн с этажом",
         price=100000,
+        currency="USD",
+        area_m2=60,
+        rooms=2,
+        floor=5,
+        total_floors=9,
+        district="Мирабадский район",
+        address_raw="ЖК Парус, 5/9",
+    )
+    second = RawListing(
+        source="olx",
+        source_id="bbb",
+        url="https://olx.test/bbb",
+        title="2-комн без этажа",
+        price=101000,  # +1%
         currency="USD",
         area_m2=60,
         rooms=2,
         floor=None,
         total_floors=None,
         district="Мирабадский район",
-        address_raw="Один",
+        address_raw="Парус ЖК",
     )
-    first = RawListing(source_id="aaa", **{**base, "address_raw": "Один"})
-    second = RawListing(source_id="bbb", **{**base, "address_raw": "Совсем другой адрес"})
+
+    listing, _ = upsert_raw_listing(db_session, first)
+    other, is_new = upsert_raw_listing(db_session, second)
+    db_session.commit()
+
+    assert is_new is False
+    assert other.id == listing.id
+    assert other.duplicate_count == 2
+
+
+def test_loose_dedup_keeps_distinct_known_floors(db_session):
+    # Same district/area/rooms/price-window but distinct known floors —
+    # different physical flats, must not merge. Addresses differ so the hash
+    # key path won't match either; the floor guard in find_duplicate_by_flat
+    # is what keeps them apart.
+    base = dict(
+        source="olx",
+        currency="USD",
+        area_m2=60,
+        rooms=2,
+        district="Мирабадский район",
+        total_floors=9,
+    )
+    first = RawListing(
+        source_id="aaa",
+        url="https://olx.test/aaa",
+        title="2-комн 3/9",
+        address_raw="дом на углу",
+        price=100000,
+        floor=3,
+        **base,
+    )
+    second = RawListing(
+        source_id="bbb",
+        url="https://olx.test/bbb",
+        title="2-комн 7/9",
+        address_raw="совсем другой ориентир",
+        price=101000,
+        floor=7,
+        **base,
+    )
 
     listing, _ = upsert_raw_listing(db_session, first)
     other, is_new = upsert_raw_listing(db_session, second)

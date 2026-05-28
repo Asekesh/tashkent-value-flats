@@ -223,6 +223,8 @@ def test_cma_excludes_extreme_floor_for_middle_subject(db_session):
 
 
 def test_cma_excludes_different_era_by_year(db_session):
+    # Distinct floors per listing so the relaxed loose-dedup (which would
+    # otherwise merge same-address rows within ±5% price) keeps them apart.
     subject = _seed(
         db_session,
         "y1",
@@ -230,6 +232,7 @@ def test_cma_excludes_different_era_by_year(db_session):
         price=100_000,
         address="Чехова 5",
         description="2-комн, год постройки 2022, евроремонт",
+        floor=3,
     )
     # та же эпоха (2025) → ОК
     _seed(
@@ -239,6 +242,7 @@ def test_cma_excludes_different_era_by_year(db_session):
         price=105_000,
         address="Чехова 5",
         description="2-комн, год постройки 2025",
+        floor=4,
     )
     # старый фонд (1980) → отсекаем
     _seed(
@@ -248,6 +252,7 @@ def test_cma_excludes_different_era_by_year(db_session):
         price=60_000,
         address="Чехова 5",
         description="2-комн, год постройки 1980, старый фонд",
+        floor=5,
     )
     db_session.commit()
 
@@ -257,6 +262,8 @@ def test_cma_excludes_different_era_by_year(db_session):
 
 
 def test_cma_excludes_different_segment(db_session):
+    # Distinct floors so the relaxed loose-dedup doesn't merge same-address
+    # rows with prices inside its ±5% window.
     subject = _seed(
         db_session,
         "s_new",
@@ -264,6 +271,7 @@ def test_cma_excludes_different_segment(db_session):
         price=100_000,
         address="Чехова 5",
         title="2-комн новостройка",
+        floor=3,
     )
     # новостройка → ОК
     _seed(
@@ -273,6 +281,7 @@ def test_cma_excludes_different_segment(db_session):
         price=105_000,
         address="Чехова 5",
         title="2-комн новостройка сдан",
+        floor=4,
     )
     # вторичка → отсекаем
     _seed(
@@ -282,6 +291,7 @@ def test_cma_excludes_different_segment(db_session):
         price=60_000,
         address="Чехова 5",
         title="2-комн хрущёвка",
+        floor=5,
     )
     db_session.commit()
 

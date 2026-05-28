@@ -22,8 +22,22 @@ from app.services.market_estimate import compute_and_store as _compute_market_es
 
 
 RELIST_GAP_DAYS = 3
-PRICE_CHANGE_EPS_USD = 1.0
+# Источники (OLX/Uybor) показывают USD-эквивалент UZS-цены по своему живому курсу,
+# поэтому при каждом скрейпе цена «дрожит» на десятки долларов / десятые доли процента
+# без реальных действий продавца. Считаем изменение цены значимым, только если
+# превышены оба порога: и относительный, и абсолютный.
+PRICE_CHANGE_MIN_PCT = 0.005  # 0.5%
+PRICE_CHANGE_MIN_USD = 200.0
 DELIST_THRESHOLD_DAYS = 3
+
+
+def _is_significant_price_change(prev: float | None, new: float | None) -> bool:
+    if prev is None or new is None or prev <= 0:
+        return False
+    delta = abs(new - prev)
+    if delta < PRICE_CHANGE_MIN_USD:
+        return False
+    return (delta / prev) >= PRICE_CHANGE_MIN_PCT
 
 
 def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
@@ -67,7 +81,7 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
                 "source_id": raw.source_id,
                 "note": f"Пропадало {gap_days} дн.",
             })
-        if prev_price is not None and abs((price_usd or 0) - prev_price) >= PRICE_CHANGE_EPS_USD:
+        if _is_significant_price_change(prev_price, price_usd):
             events.append({
                 "event_type": "price_changed",
                 "old_price_usd": prev_price,
@@ -95,7 +109,7 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
                 "source_id": raw.source_id,
                 "note": note,
             })
-        if prev_price is not None and abs((price_usd or 0) - prev_price) >= PRICE_CHANGE_EPS_USD:
+        if _is_significant_price_change(prev_price, price_usd):
             events.append({
                 "event_type": "price_changed",
                 "old_price_usd": prev_price,
@@ -183,20 +197,30 @@ LOOSE_DEDUP_PRICE_TOLERANCE = 0.05
 
 def find_duplicate_by_flat(db: Session, raw: RawListing, price_usd: float) -> Listing | None:
     """Same-source second-pass match for reposts that the hashed fingerprint
-    misses because title/address text drifted. Requires both floors to be
-    parsed so we don't over-merge listings with missing floor metadata."""
-    if raw.floor is None or raw.total_floors is None or not price_usd:
+    misses because title/address text drifted.
+
+    Floor is treated as wildcard-compatible: a missing floor on the incoming
+    raw matches any existing row, and vice versa. ``total_floors`` is no
+    longer part of the match — district + rooms + area + price-within-±5%
+    is already a strong same-flat signal, and OLX cards routinely omit the
+    building height field.
+    """
+    if not price_usd or raw.area_m2 is None or raw.rooms is None:
         return None
     price_lo = price_usd * (1 - LOOSE_DEDUP_PRICE_TOLERANCE)
     price_hi = price_usd * (1 + LOOSE_DEDUP_PRICE_TOLERANCE)
+    floor_clause = (
+        or_(Listing.floor == raw.floor, Listing.floor.is_(None))
+        if raw.floor is not None
+        else True
+    )
     return db.scalar(
         select(Listing).where(
             Listing.source == raw.source,
             Listing.district == raw.district,
             Listing.rooms == raw.rooms,
             Listing.area_m2 == raw.area_m2,
-            Listing.floor == raw.floor,
-            Listing.total_floors == raw.total_floors,
+            floor_clause,
             Listing.price_usd.between(price_lo, price_hi),
             or_(Listing.source != raw.source, Listing.source_id != raw.source_id),
         )
