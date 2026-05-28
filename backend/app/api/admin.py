@@ -92,3 +92,8 @@ def stop_olx_archive_sweep() -> dict:
 @router.post("/dedup/merge")
 def merge_duplicate_listings(dry_run: bool = False, db: Session = Depends(get_db)) -> dict:
     return merge_existing_duplicates(db, dry_run=dry_run)
+
+
+@router.post("/sweep/listing/{listing_id}")
+def sweep_single_listing(listing_id: int) -> dict:
+    return archive_sweep.probe_one_listing(listing_id)

@@ -162,6 +162,49 @@ def _has_photos(raw: str | None) -> bool:
     return bool(raw) and raw not in ("[]", "")
 
 
+def probe_one_listing(listing_id: int) -> dict:
+    """Synchronously probe a single OLX listing's detail page and apply the
+    у.е. price / photo fixes. Used to skip the full-sweep wait when a single
+    row needs to be reconciled right now."""
+    adapter = OlxAdapter()
+    with httpx.Client(timeout=25, follow_redirects=True, headers=_HEADERS) as client, \
+            SessionLocal() as db:
+        listing = db.get(Listing, listing_id)
+        if listing is None:
+            return {"ok": False, "reason": "not_found"}
+        if listing.source != "olx":
+            return {"ok": False, "reason": "not_olx", "source": listing.source}
+        try:
+            probe = adapter.probe_listing(listing.url, client)
+        except Exception as exc:  # noqa: BLE001 — surface the failure to the caller
+            return {"ok": False, "reason": "probe_failed", "error": str(exc)}
+        now = utcnow()
+        result: dict = {
+            "ok": True,
+            "listing_id": listing.id,
+            "url": listing.url,
+            "is_gone": probe.is_gone,
+            "price_before": listing.price_usd,
+            "price_after": listing.price_usd,
+            "floor": listing.floor,
+            "applied_usd_price": False,
+        }
+        if probe.is_gone:
+            listing.status = "removed"
+            listing.seen_at = now
+            db.commit()
+            result["status"] = "removed"
+            return result
+        if probe.photos and not _has_photos(listing.photos):
+            listing.photos = dumps_json(probe.photos)
+            result["photos_filled"] = True
+        if _apply_usd_price(listing, probe.usd_price, now):
+            result["applied_usd_price"] = True
+            result["price_after"] = listing.price_usd
+        db.commit()
+        return result
+
+
 # Floor for "the у.е.-price is materially different from what we stored"
 # decisions. ≥1% diff filters out rounding while still catching the 5–7%
 # bias that the OLX-live-rate ↔ fixed-12 700-rate round trip introduces.
