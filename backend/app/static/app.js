@@ -811,14 +811,21 @@ function cmaTable(subject, analogs) {
   const headers = CMA_SORT_COLUMNS
     .map((col) => {
       const active = sort.key === col.key;
-      const arrow = active ? (sort.dir >= 0 ? " ▲" : " ▼") : "";
+      const dirClass = active ? (sort.dir >= 0 ? " asc" : " desc") : "";
       const ariaSort = active ? (sort.dir >= 0 ? "ascending" : "descending") : "none";
-      return `<th class="cma-th-sort${active ? " active" : ""}" data-sort="${col.key}" aria-sort="${ariaSort}" tabindex="0">${col.label}${arrow}</th>`;
+      const indicator = `<span class="cma-sort-indicator${dirClass}" aria-hidden="true"><span class="up">▲</span><span class="down">▼</span></span>`;
+      const title = active
+        ? (sort.dir >= 0 ? "По возрастанию — кликните для обратной сортировки" : "По убыванию — кликните для обратной сортировки")
+        : "Кликните, чтобы отсортировать";
+      return `<th class="cma-th-sort${active ? " active" : ""}" data-sort="${col.key}" aria-sort="${ariaSort}" tabindex="0" title="${title}"><span class="cma-th-label">${col.label}</span>${indicator}</th>`;
     })
     .join("");
   return `
     <section class="cma-table-wrap">
-      <h3>Аналоги (${sorted.length})</h3>
+      <div class="cma-table-head">
+        <h3>Аналоги (${sorted.length})</h3>
+        <span class="cma-table-hint">${icon("arrow-up")} Кликните на заголовок столбца, чтобы отсортировать</span>
+      </div>
       <table class="cma-table">
         <thead><tr>${headers}<th></th></tr></thead>
         <tbody>${rows}</tbody>
