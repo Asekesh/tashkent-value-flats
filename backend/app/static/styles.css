@@ -444,6 +444,10 @@ button:disabled {
   gap: var(--sp-4);
 }
 
+.row-actions {
+  flex-wrap: wrap;
+}
+
 .status {
   background: rgba(255, 255, 255, 0.6);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -1256,8 +1260,20 @@ select:focus {
     position: static;
   }
 
+  .brand {
+    min-height: 56px;
+    padding: var(--sp-4) var(--sp-5);
+  }
+
+  .brand-logo {
+    height: 32px;
+    width: 32px;
+  }
+
   .nav-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-3);
+    padding: 10px 8px;
   }
 
   .nav-list p,
@@ -1267,6 +1283,8 @@ select:focus {
 
   .nav-item {
     justify-content: center;
+    min-height: 42px;
+    padding: var(--sp-3) 8px;
   }
 
   .nav-item small {
@@ -1280,10 +1298,33 @@ select:focus {
     flex-direction: column;
   }
 
+  .topbar {
+    gap: var(--sp-3);
+    min-height: 0;
+    padding: var(--sp-4) var(--sp-5);
+  }
+
+  .topbar h1 {
+    font-size: var(--fs-base);
+  }
+
   .topbar-actions,
   .page-actions,
-  .auto-row {
+  .auto-row,
+  .row-actions {
     flex-wrap: wrap;
+  }
+
+  .auth-box {
+    flex-wrap: wrap;
+  }
+
+  .page-heading h2 {
+    font-size: var(--fs-xl);
+  }
+
+  .page-heading p {
+    font-size: var(--fs-sm);
   }
 
   .scan-button {
@@ -1306,6 +1347,75 @@ select:focus {
 
   .listing-media {
     min-height: 170px;
+  }
+
+  .row-actions .btn,
+  .row-actions a.btn {
+    flex: 1 1 calc(50% - var(--sp-4));
+    min-width: 0;
+    padding: 0 var(--sp-4);
+  }
+}
+
+@media (max-width: 480px) {
+  .nav-item {
+    gap: var(--sp-2);
+    padding: var(--sp-2) 6px;
+  }
+
+  .nav-item strong {
+    font-size: var(--fs-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .nav-item > span:first-child {
+    height: 28px;
+    width: 28px;
+  }
+
+  .nav-badge {
+    margin-left: var(--sp-2);
+    padding: 1px 5px;
+  }
+
+  .page {
+    padding: 14px 12px;
+  }
+
+  .listing-body {
+    padding: 12px;
+  }
+
+  .listing-bottom strong,
+  .large-price {
+    font-size: var(--fs-xl);
+  }
+
+  .row-actions {
+    gap: var(--sp-3);
+    width: 100%;
+  }
+
+  .row-actions .btn,
+  .row-actions a.btn {
+    flex: 1 1 calc(50% - var(--sp-3));
+    font-size: var(--fs-xs);
+  }
+
+  .row-actions .icon-button {
+    flex: 0 0 auto;
+  }
+
+  .quick-filters {
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+  }
+
+  .filter-actions .btn {
+    flex: 1 1 auto;
   }
 }
 

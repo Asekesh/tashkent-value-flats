@@ -111,30 +111,7 @@
     }
   }
 
-  // Meaningful actions = applying filters / opening a card. Scroll & hover
-  // are intentionally NOT listed here.
-  var TRIGGER_SELECTOR =
-    "#applyButton,[data-quick-rooms],[data-quick-discount],[data-quick-ppm]," +
-    "[data-stat-filter],[data-source-pill],[data-cma],.listing-card";
-
-  // Capture phase so we see the click even though app.js handlers run too —
-  // the gate is purely additive and never blocks the underlying action.
-  document.addEventListener(
-    "click",
-    function (event) {
-      if (event.target.closest && event.target.closest(TRIGGER_SELECTOR)) {
-        onMeaningfulAction();
-      }
-    },
-    true
-  );
-  document.addEventListener(
-    "change",
-    function (event) {
-      if (event.target && event.target.id === "sort") onMeaningfulAction();
-    },
-    true
-  );
+  // Reg-gate disabled by request — no auto-prompt.
 
   // Pull auth state + config once. Gate stays inert until this resolves.
   Promise.all([

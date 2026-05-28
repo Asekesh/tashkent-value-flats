@@ -455,7 +455,7 @@ function renderInsight() {
       <dt>Дубли</dt><dd>${listing.duplicate_count}</dd>
       <dt>Источник</dt><dd>${escapeHtml(sourceLabel(listing.source))}</dd>
     </dl>
-    <a class="btn btn-secondary btn-block" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">Смотреть оригинал</a>
+    <a class="btn btn-secondary btn-block" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">Источник</a>
   `;
 }
 
@@ -526,7 +526,7 @@ function listingCard(listing, rank) {
             <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">${icon(favorite ? "heart-fill" : "heart")}</button>
             <button class="btn btn-ghost" data-cma="${listing.id}" title="Сравнительный анализ" type="button">${icon("chart")} Найти аналоги</button>
             <button class="btn btn-ghost" data-history="${listing.id}" title="История объявления" type="button">${icon("clock")} История</button>
-            <a class="btn btn-ghost" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">${icon("arrow-up-right")} Смотреть оригинал</a>
+            <a class="btn btn-ghost" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">${icon("arrow-up-right")} Источник</a>
           </div>
         </div>
       </div>

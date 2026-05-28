@@ -93,19 +93,6 @@
   var howGrid = document.getElementById("howItWorksGrid");
   if (howGrid) howGrid.innerHTML = cardsHtml();
 
-  // Иконка «?» в шапке — повторно открывает welcome screen.
-  var helpBtn = document.getElementById("onboardingHelp");
-  if (helpBtn) helpBtn.addEventListener("click", showModal);
 
-  // Доступ к окну для прочих кнопок при необходимости.
   window.openOnboarding = showModal;
-
-  // Первый визит — показываем автоматически.
-  var seen = null;
-  try {
-    seen = localStorage.getItem(STORAGE_KEY);
-  } catch (e) {
-    /* localStorage недоступен — покажем окно как при первом визите */
-  }
-  if (!seen) showModal();
 })();
