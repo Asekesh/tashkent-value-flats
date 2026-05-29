@@ -7,8 +7,9 @@ ads whose detail pages already say "Объявление в архиве". This 
 every active OLX listing, probes the detail page, and flips archived/gone
 ones to ``removed`` immediately.
 
-Triggered automatically after a ``full`` OLX scan and via
-POST /api/admin/sweep/olx-archived; progress at GET /api/admin/sweep/progress.
+Triggered automatically once after app startup, after a ``full`` OLX scan, and
+via POST /api/admin/sweep/olx-archived; progress at
+GET /api/admin/sweep/progress.
 """
 
 from __future__ import annotations

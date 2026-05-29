@@ -1,18 +1,36 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from datetime import datetime
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models import Listing, ScrapeRun, ScrapeTask
+from app.scrapers.base import RawListing
 from app.scrapers.registry import ADAPTERS, get_adapter, parse_fixture
 from app.services import archive_sweep, scrape_progress
 from app.services.listings import mark_delisted_for_source, upsert_raw_listing
 from app.services.normalization import price_per_m2, to_usd
+
+
+_DETAIL_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; TashkentValueFlats/0.1; +https://github.com/Asekesh/tashkent-value-flats)",
+    "Accept-Language": "ru,en;q=0.8",
+}
+
+# Ratio window (search-card UZS->USD estimate / stored detail-confirmed USD)
+# where a refresh of a known OLX-USD listing is plausibly just fixed-rate FX
+# noise around the same у.е. ask. Inside it the upsert preserve guard holds the
+# price and we skip the HTTP probe; outside it the search price moved enough to
+# signal a real change, so we re-probe the detail page for the true USD ask
+# instead of trusting the lossy UZS estimate. Asymmetric like to_usd's bias.
+_OLX_FX_NOISE_LO = 0.90
+_OLX_FX_NOISE_HI = 1.02
 
 
 def resolve_sources(source: str) -> list[str]:
@@ -210,33 +228,118 @@ def _run_live_scan(
     known_total = 0
     new_count = 0
     updated_count = 0
+    detail_client = (
+        httpx.Client(timeout=25, follow_redirects=True, headers=_DETAIL_HEADERS)
+        if getattr(adapter, "source", None) == "olx"
+        else None
+    )
 
-    for page_listings in adapter.fetch_live_pages(max_pages=page_limit, delay_seconds=delay_seconds):
-        page_new = 0
-        page_updated = 0
-        page_found = len(page_listings)
-        for raw in page_listings:
-            if not _is_plausible_listing(raw, min_price_usd, min_price_per_m2_usd):
-                continue
-            known_before = _is_known_listing(db, raw.source, raw.source_id)
-            _, is_new = upsert_raw_listing(db, raw)
-            if is_new:
-                new_count += 1
-                page_new += 1
-            else:
-                updated_count += 1
-                page_updated += 1
-                if known_before:
-                    known_total += 1
-        db.commit()
-        scrape_progress.increment(pages=1, found=page_found, new=page_new, updated=page_updated)
-        _sync_task_from_progress(db)
-        if scrape_progress.is_stop_requested():
-            return new_count, updated_count
-        if known_stop and known_total >= known_stop:
-            return new_count, updated_count
+    try:
+        for page_listings in adapter.fetch_live_pages(max_pages=page_limit, delay_seconds=delay_seconds):
+            page_new = 0
+            page_updated = 0
+            page_found = len(page_listings)
+            for raw in page_listings:
+                known_before = _is_known_listing(db, raw.source, raw.source_id)
+                if detail_client is not None:
+                    if not known_before:
+                        raw = _probe_new_olx_listing(raw, adapter, detail_client)
+                        if raw is None:
+                            continue
+                    elif mode == "quick":
+                        # Re-probe known OLX-USD movers only in quick scans (bounded
+                        # by known_stop). Full scans skip it: their post-scan
+                        # archive_sweep already re-probes every active OLX detail
+                        # page, so re-probing here would just duplicate that work and
+                        # — on a market-wide FX move that pushes every row out of the
+                        # window — fire an unbounded sequential probe storm.
+                        raw = _reprobe_known_olx_listing(db, raw, adapter, detail_client)
+                if not _is_plausible_listing(raw, min_price_usd, min_price_per_m2_usd):
+                    continue
+                _, is_new = upsert_raw_listing(db, raw)
+                if is_new:
+                    new_count += 1
+                    page_new += 1
+                else:
+                    updated_count += 1
+                    page_updated += 1
+                    if known_before:
+                        known_total += 1
+            db.commit()
+            scrape_progress.increment(pages=1, found=page_found, new=page_new, updated=page_updated)
+            _sync_task_from_progress(db)
+            if scrape_progress.is_stop_requested():
+                return new_count, updated_count
+            if known_stop and known_total >= known_stop:
+                return new_count, updated_count
+    finally:
+        if detail_client is not None:
+            detail_client.close()
 
     return new_count, updated_count
+
+
+def _probe_new_olx_listing(raw: RawListing, adapter, client: httpx.Client) -> RawListing | None:
+    """Read OLX detail-only fields before the first save.
+
+    Search pages report every price as UZS. The detail page preserves the
+    seller's original у.е. currency, so first-time OLX rows must be probed
+    before upsert to avoid showing the ~5% low converted price even briefly.
+    Returns the detail-merged raw (currency rewritten to USD when the seller
+    listed in у.е.), or ``None`` when the ad is gone / the probe raised — the
+    caller then skips the row and retries on the next quick scan.
+    """
+    try:
+        probe = adapter.probe_listing(raw.url, client)
+    except Exception:
+        return None
+    if probe.is_gone:
+        return None
+    updates: dict = {}
+    if probe.usd_price is not None:
+        updates["price"] = probe.usd_price
+        updates["currency"] = "USD"
+    if probe.photos:
+        updates["photos"] = probe.photos
+    if probe.floor is not None:
+        updates["floor"] = probe.floor
+    if probe.total_floors is not None:
+        updates["total_floors"] = probe.total_floors
+    return replace(raw, **updates) if updates else raw
+
+
+def _reprobe_known_olx_listing(db: Session, raw: RawListing, adapter, client: httpx.Client) -> RawListing:
+    """Re-probe a KNOWN OLX listing's detail page when its search-card price
+    moved enough to signal a real change.
+
+    A stored detail-confirmed USD ask is preserved against search-page UZS in
+    upsert (``listings._should_preserve_olx_detail_price``), so fixed-rate FX
+    noise never corrupts it. The flip side is that a genuine seller price change
+    would stay frozen until the next archive_sweep. When the incoming search
+    estimate leaves the FX-noise window we re-probe the detail page so the real
+    change is captured immediately and accurately (true у.е. ask, not the
+    ~5%-low UZS estimate); the resulting raw carries currency=USD, so upsert
+    takes the normal update path and logs a correct price_changed event.
+
+    On probe failure (gone / network) the raw is returned unchanged: the upsert
+    preserve guard then keeps the existing USD — a quick scan never rolls a
+    detail-confirmed USD price back to the search-page UZS estimate.
+    """
+    if raw.currency.upper() != "UZS":
+        return raw
+    listing = db.scalar(
+        select(Listing).where(Listing.source == raw.source, Listing.source_id == raw.source_id)
+    )
+    if listing is None or (listing.currency or "").upper() != "USD" or not listing.price_usd:
+        return raw
+    incoming_usd = to_usd(raw.price, raw.currency)
+    if not incoming_usd or listing.price_usd <= 0:
+        return raw
+    ratio = incoming_usd / listing.price_usd
+    if _OLX_FX_NOISE_LO <= ratio <= _OLX_FX_NOISE_HI:
+        return raw
+    probed = _probe_new_olx_listing(raw, adapter, client)
+    return probed if probed is not None else raw
 
 
 def _sync_task_from_progress(db: Session) -> None:

@@ -7,7 +7,7 @@ from datetime import datetime
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models import Listing, ScrapeTask
-from app.services import scrape_progress
+from app.services import archive_sweep, scrape_progress
 from app.services.market_estimate import recompute_all as recompute_market_estimates
 from app.services.scrape import resolve_live_sources, run_scrape_for_source
 from sqlalchemy import func, select
@@ -124,3 +124,29 @@ def _rebuild_market_estimates() -> None:
             recompute_market_estimates(db)
         except Exception:  # pragma: no cover — не валим scheduler из-за rebuild
             pass
+
+
+async def scheduled_olx_startup_sweep() -> None:
+    """Разовый detail-page sweep активных OLX-объявлений после старта.
+
+    Поисковые страницы OLX всегда отдают цену в UZS, поэтому у.е.-объявление
+    лежит на ~5% ниже реальной цены, пока его детальную страницу не опросят.
+    Новые OLX-строки пробиваются синхронно в live-scan до сохранения; этот
+    разовый проход нужен только для старых накопленных цен после деплоя.
+    """
+    settings = get_settings()
+    if not settings.allow_live_scraping:
+        return
+    await asyncio.sleep(max(0, settings.olx_sweep_startup_delay_seconds))
+    if _has_active_olx():
+        # start_* вернёт False, если sweep уже идёт после ручного/full-скана.
+        archive_sweep.start_sweep_in_background()
+
+
+def _has_active_olx() -> bool:
+    with SessionLocal() as db:
+        return db.scalar(
+            select(Listing.id)
+            .where(Listing.source == "olx", Listing.status == "active")
+            .limit(1)
+        ) is not None

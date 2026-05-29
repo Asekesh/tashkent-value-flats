@@ -22,6 +22,7 @@ from app.services.listings import upsert_raw_listing
 from app.services.normalization import normalize_district
 from app.services.scheduler import (
     scheduled_market_rebuild_loop,
+    scheduled_olx_startup_sweep,
     scheduled_scrape_loop,
     stop_scheduler,
 )
@@ -72,7 +73,10 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     _ensure_trigger_columns()
     _ensure_market_columns()
+    # Base.metadata.create_all уже создаст alerts на пустых БД; в проде
+    # Alembic тоже накатит. Доп. safety net не нужен.
     scheduler_task: asyncio.Task | None = None
+    olx_sweep_task: asyncio.Task | None = None
     if settings.purge_fixture_listings_on_startup:
         with SessionLocal() as db:
             db.execute(
@@ -103,6 +107,9 @@ async def lifespan(_: FastAPI):
                 db.commit()
     if settings.enable_scrape_scheduler and settings.allow_live_scraping:
         scheduler_task = asyncio.create_task(scheduled_scrape_loop())
+        # Разовый OLX-sweep: выправляет у.е.-цены, накопленные до этого фикса.
+        # Новые OLX-строки пробиваются по detail page прямо во время скана.
+        olx_sweep_task = asyncio.create_task(scheduled_olx_startup_sweep())
     # Запускаем market-rebuild loop всегда — он независим от скрейпа.
     # Первый прогон срабатывает сразу если есть листинги без оценки (это
     # покрывает первый деплой: все 11700 листингов получают market_basis
@@ -112,6 +119,7 @@ async def lifespan(_: FastAPI):
     )
     yield
     await stop_scheduler(scheduler_task)
+    await stop_scheduler(olx_sweep_task)
     await stop_scheduler(market_rebuild_task)
 
 

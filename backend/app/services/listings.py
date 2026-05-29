@@ -39,6 +39,31 @@ def _is_significant_price_change(prev: float | None, new: float | None) -> bool:
     return ((prev - new) / prev) > PRICE_CHANGE_MIN_PCT
 
 
+def _should_preserve_olx_detail_price(listing: Listing, raw: RawListing) -> bool:
+    """Keep a detail-page-confirmed OLX USD price through search-page refreshes.
+
+    OLX search pages report every card as UZS. For ads whose detail page says
+    the seller entered у.е., archive_sweep / the new-listing probe rewrite
+    ``currency`` to USD. A search-page UZS card must NEVER overwrite that
+    authoritative USD ask: ``to_usd`` divides by a fixed rate while the search
+    card uses OLX's live rate, so the converted estimate runs ~5% low and would
+    both corrupt the price and emit a bogus ``price_changed`` (FX drift alone
+    can breach any fixed ratio window). A search refresh still updates
+    metadata/seen_at, but the price stays frozen here. Genuine seller price
+    changes are picked up by re-probing the detail page in the live scan
+    (``scrape._reprobe_known_olx_listing``): by the time a real update reaches
+    upsert the raw already carries ``currency='USD'``, so this guard is False
+    and the normal update path runs.
+    """
+    if raw.source != "olx" or raw.currency.upper() != "UZS":
+        return False
+    if listing.source != "olx" or listing.currency.upper() != "USD":
+        return False
+    if not listing.price_usd or listing.price_usd <= 0:
+        return False
+    return True
+
+
 def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
     db.flush()
     existing = db.scalar(select(Listing).where(Listing.source == raw.source, Listing.source_id == raw.source_id))
@@ -61,6 +86,7 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         prev_price = existing.price_usd
         prev_status = existing.status
         prev_seen_at = existing.seen_at
+        preserve_detail_price = _should_preserve_olx_detail_price(existing, raw)
         if prev_status == "removed":
             events.append({
                 "event_type": "relisted",
@@ -80,7 +106,7 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
                 "source_id": raw.source_id,
                 "note": f"Пропадало {gap_days} дн.",
             })
-        if _is_significant_price_change(prev_price, price_usd):
+        if not preserve_detail_price and _is_significant_price_change(prev_price, price_usd):
             events.append({
                 "event_type": "price_changed",
                 "old_price_usd": prev_price,
@@ -94,6 +120,7 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         prev_price = duplicate.price_usd
         prev_status = duplicate.status
         prev_seen_at = duplicate.seen_at
+        preserve_detail_price = _should_preserve_olx_detail_price(duplicate, raw)
         is_new_source = (duplicate.source, duplicate.source_id) != (raw.source, raw.source_id)
         gap_old = prev_seen_at and (now - prev_seen_at) >= timedelta(days=RELIST_GAP_DAYS)
         if is_new_source and (prev_status == "removed" or gap_old):
@@ -108,7 +135,7 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
                 "source_id": raw.source_id,
                 "note": note,
             })
-        if _is_significant_price_change(prev_price, price_usd):
+        if not preserve_detail_price and _is_significant_price_change(prev_price, price_usd):
             events.append({
                 "event_type": "price_changed",
                 "old_price_usd": prev_price,
@@ -120,6 +147,7 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         listing = Listing(source=raw.source, source_id=raw.source_id, url=raw.url, duplicate_group_key=group_key)
         db.add(listing)
         is_new = True
+        preserve_detail_price = False
         events.append({
             "event_type": "first_seen",
             "new_price_usd": price_usd,
@@ -144,11 +172,13 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         listing.source_id = raw.source_id
         listing.url = raw.url
         listing.title = raw.title
-        listing.price = raw.price
-        listing.currency = raw.currency
-        listing.price_usd = price_usd
+        if not preserve_detail_price:
+            listing.price = raw.price
+            listing.currency = raw.currency
+            listing.price_usd = price_usd
         listing.area_m2 = raw.area_m2
-        listing.price_per_m2_usd = ppm
+        if not preserve_detail_price:
+            listing.price_per_m2_usd = ppm
         listing.rooms = raw.rooms
         listing.floor = raw.floor
         listing.total_floors = raw.total_floors

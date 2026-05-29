@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Каждый upsert и так считает свою оценку сразу; этот rebuild ловит drift
     # у листингов, чьи соседи изменились без них.
     market_rebuild_interval_hours: int = 168  # 1 неделя
+    # Разовый detail-page sweep активных OLX после деплоя: выправляет уже
+    # накопленные у.е.-цены. Новые OLX-объявления пробиваются по detail page
+    # прямо во время сканирования, поэтому постоянный полный sweep не нужен.
+    olx_sweep_startup_delay_seconds: int = 120
 
     # --- Auth (Telegram login + JWT session) ---
     telegram_bot_token: str = ""
