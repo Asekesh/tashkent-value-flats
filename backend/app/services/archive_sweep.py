@@ -43,6 +43,7 @@ class SweepState:
     archived: int = 0
     photos_filled: int = 0
     prices_fixed: int = 0
+    floors_filled: int = 0
     failed: int = 0
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -143,6 +144,9 @@ def _worker(delay_seconds: float) -> None:
                     if _apply_usd_price(listing, probe.usd_price, now):
                         with _lock:
                             _state.prices_fixed += 1
+                    if _backfill_floor(listing, probe):
+                        with _lock:
+                            _state.floors_filled += 1
                 with _lock:
                     _state.processed += 1
                 if index % _COMMIT_EVERY == 0:
@@ -160,6 +164,22 @@ def _worker(delay_seconds: float) -> None:
 
 def _has_photos(raw: str | None) -> bool:
     return bool(raw) and raw not in ("[]", "")
+
+
+def _backfill_floor(listing: Listing, probe) -> bool:
+    """Fill floor / total_floors for rows the search-page ingest left as None.
+
+    Floor is a physical property of the flat; the detail-page params are
+    authoritative, so we only fill the gaps and never overwrite a known value.
+    """
+    changed = False
+    if listing.floor is None and probe.floor is not None:
+        listing.floor = probe.floor
+        changed = True
+    if listing.total_floors is None and probe.total_floors is not None:
+        listing.total_floors = probe.total_floors
+        changed = True
+    return changed
 
 
 def probe_one_listing(listing_id: int) -> dict:
@@ -201,6 +221,9 @@ def probe_one_listing(listing_id: int) -> dict:
         if _apply_usd_price(listing, probe.usd_price, now):
             result["applied_usd_price"] = True
             result["price_after"] = listing.price_usd
+        if _backfill_floor(listing, probe):
+            result["floor_filled"] = True
+            result["floor"] = listing.floor
         db.commit()
         return result
 

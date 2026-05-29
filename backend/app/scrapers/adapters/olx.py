@@ -32,6 +32,8 @@ class ListingProbe:
     is_gone: bool
     photos: list[str]
     usd_price: float | None = None
+    floor: int | None = None
+    total_floors: int | None = None
 
 
 class OlxAdapter(SourceAdapter):
@@ -123,10 +125,13 @@ class OlxAdapter(SourceAdapter):
         response.raise_for_status()
         if _detail_is_archived(response.text):
             return ListingProbe(is_gone=True, photos=[])
+        floor, total_floors = _extract_detail_floor(response.text)
         return ListingProbe(
             is_gone=False,
             photos=_extract_detail_photos(response.text),
             usd_price=_extract_detail_usd_price(response.text),
+            floor=floor,
+            total_floors=total_floors,
         )
 
     def fetch_listing_photos(self, url: str, client: httpx.Client) -> list[str] | None:
@@ -329,6 +334,27 @@ def _extract_detail_photos(html: str) -> list[str]:
     if isinstance(photos, list):
         return [str(photo) for photo in photos if photo][:5]
     return []
+
+
+def _extract_detail_floor(html: str) -> tuple[int | None, int | None]:
+    """Floor / building height from a single listing's detail-page params.
+
+    Search-page state usually carries these, but rows ingested before the
+    params backfill landed — or canonicals matched as a *not-cheaper* repost,
+    whose floor is never overwritten — sit in the DB with ``floor=None``. The
+    detail page always exposes the structured params, so the archive sweep can
+    fill the gap from here.
+    """
+    data = _load_prerendered_state(html)
+    if data is None:
+        return None, None
+    ad = data.get("ad")
+    if isinstance(ad, dict):
+        ad = ad.get("ad", ad)
+    if not isinstance(ad, dict):
+        return None, None
+    flat = _flatten_params(ad.get("params"))
+    return _int_or_none(flat.get("floor")), _int_or_none(flat.get("total_floors"))
 
 
 def _extract_jsonld_offers(soup: BeautifulSoup) -> list[dict]:

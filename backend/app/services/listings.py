@@ -159,6 +159,13 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         listing.photos = dumps_json(raw.photos)
         listing.seller_type = raw.seller_type
         listing.published_at = raw.published_at
+    # Floor is a physical property of the flat, identical across reposts — fill
+    # it from any incoming row that knows it, even a not-cheaper duplicate that
+    # the block above won't overwrite. Stops floor=None from sticking forever.
+    if listing.floor is None and raw.floor is not None:
+        listing.floor = raw.floor
+    if listing.total_floors is None and raw.total_floors is not None:
+        listing.total_floors = raw.total_floors
     listing.seen_at = now
     listing.status = "active"
     listing.source_urls = dumps_json(merge_source_urls(loads_json(listing.source_urls, []), source_urls))
