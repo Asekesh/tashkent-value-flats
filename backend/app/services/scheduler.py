@@ -127,20 +127,40 @@ def _rebuild_market_estimates() -> None:
 
 
 async def scheduled_olx_startup_sweep() -> None:
-    """Разовый detail-page sweep активных OLX-объявлений после старта.
+    """Detail-page sweep активных OLX: разовый после старта + периодический.
 
-    Поисковые страницы OLX всегда отдают цену в UZS, поэтому у.е.-объявление
-    лежит на ~5% ниже реальной цены, пока его детальную страницу не опросят.
-    Новые OLX-строки пробиваются синхронно в live-scan до сохранения; этот
-    разовый проход нужен только для старых накопленных цен после деплоя.
+    Поисковые страницы OLX отдают цену в UZS и не показывают архивные/снятые
+    объявления. detail-проход нужен, чтобы (а) выправлять накопленные у.е.-цены
+    и этажи, (б) помечать архивные как removed. Новые строки пробиваются
+    синхронно в live-scan, дрейф цен ловит quick-ре-проб, но архивы/снятия
+    между сканами вычищает только этот проход — поэтому после стартового он
+    повторяется каждые ``olx_sweep_interval_hours`` (0 — без повтора).
+
+    (Имя историческое — изначально проход был только стартовый.)
     """
     settings = get_settings()
     if not settings.allow_live_scraping:
         return
     await asyncio.sleep(max(0, settings.olx_sweep_startup_delay_seconds))
-    if _has_active_olx():
-        # start_* вернёт False, если sweep уже идёт после ручного/full-скана.
-        archive_sweep.start_sweep_in_background()
+    _maybe_start_olx_sweep()
+    interval_hours = settings.olx_sweep_interval_hours
+    if interval_hours <= 0:
+        return
+    # Минимум 1 ч (как у соседних циклов). Sweep сам идемпотентен, так что
+    # даже если интервал < длительности прохода — лишний старт просто no-op.
+    interval_seconds = max(3600, interval_hours * 3600)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        _maybe_start_olx_sweep()
+
+
+def _maybe_start_olx_sweep() -> bool:
+    """Запустить detail-sweep, если есть активные OLX. Идемпотентно:
+    ``start_sweep_in_background`` вернёт False, если sweep уже идёт (после
+    ручного/full-скана или ещё не доехавшей прошлой итерации)."""
+    if not _has_active_olx():
+        return False
+    return archive_sweep.start_sweep_in_background()
 
 
 def _has_active_olx() -> bool:
