@@ -6,7 +6,20 @@
     <title>uyradar.uz — квартиры ниже рынка в Ташкенте</title>
     <link rel="canonical" href="https://uyradar.uz/" />
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260531-brand-tg7" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260531-brand-tg8" />
+    <!-- Yandex.Metrika counter -->
+    <script type="text/javascript">
+      (function(m,e,t,r,i,k,a){
+          m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+          m[i].l=1*new Date();
+          for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+          k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+      })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=109543384', 'ym');
+
+      ym(109543384, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", accurateTrackBounce:true, trackLinks:true});
+    </script>
+    <noscript><div><img src="https://mc.yandex.ru/watch/109543384" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+    <!-- /Yandex.Metrika counter -->
   </head>
   <body>
     <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" focusable="false">
@@ -71,11 +84,11 @@
           </div>
           <div class="topbar-actions">
             <div class="tg-cta">
-              <div id="authBox" class="auth-box"></div>
               <div id="tgPromoText" class="tg-promo-text">
-                <strong><svg class="ic"><use href="#i-telegram"/></svg> Новые квартиры — в Telegram</strong>
-                <span>Зарегистрируйтесь и первыми получайте объявления ниже рынка</span>
+                <strong><svg class="ic"><use href="#i-telegram"/></svg> Регистрация через Telegram</strong>
+                <span>Первыми получайте объявления ниже рынка</span>
               </div>
+              <div id="authBox" class="auth-box"></div>
             </div>
           </div>
         </header>
@@ -290,6 +303,7 @@
         var box = document.getElementById("authBox");
         if (!box) return;
         var promo = document.getElementById("tgPromoText");
+        var cta = box.closest(".tg-cta");
         var favCta = document.getElementById("favoritesAuthCta");
         function telegramWidget(username, size) {
           var s = document.createElement("script");
@@ -323,7 +337,7 @@
           var cfg = await fetch("/auth/config").then(function (r) { return r.json(); });
           if (!cfg || !cfg.bot_username) {
             // Auth not configured — hide the prompts entirely, keep the site open.
-            if (promo) promo.hidden = true;
+            if (cta) cta.hidden = true;
             return;
           }
           box.appendChild(telegramWidget(cfg.bot_username, "medium"));
@@ -332,7 +346,7 @@
           if (favCta) favCta.hidden = false;
         } catch (e) {
           /* public site keeps working even if auth endpoints fail */
-          if (promo) promo.hidden = true;
+          if (cta) cta.hidden = true;
         }
       })();
     </script>
