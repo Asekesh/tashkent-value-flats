@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
@@ -21,14 +21,40 @@ async def scheduled_scrape_loop() -> None:
         await asyncio.sleep(interval_seconds)
 
 
+def _due_scan_mode(settings) -> str:
+    """Какой режим запускать в этом плановом цикле: quick или full.
+
+    quick-скан обрывается после quick_known_stop_threshold известных и не
+    дочитывает глубокие страницы, поэтому раз в full_scan_interval_hours
+    цикл идёт full — он проходит все страницы и помечает снятые. «Когда был
+    последний успешный full» берём из БД (ScrapeTask), чтобы решение
+    переживало рестарты/деплои и full не запускался на каждый старт. Ручной
+    full из UI тоже сбрасывает таймер (та же таблица).
+    """
+    base = settings.scheduled_scrape_mode
+    interval_hours = settings.full_scan_interval_hours
+    if interval_hours <= 0 or base == "full":
+        return base
+    with SessionLocal() as db:
+        last_full = db.scalar(
+            select(func.max(ScrapeTask.finished_at)).where(
+                ScrapeTask.mode == "full",
+                ScrapeTask.status == "success",
+            )
+        )
+    if last_full is None or datetime.utcnow() - last_full >= timedelta(hours=interval_hours):
+        return "full"
+    return base
+
+
 def _run_once() -> None:
     settings = get_settings()
     if not settings.allow_live_scraping:
         return
-    mode = settings.scheduled_scrape_mode
     sources = resolve_live_sources(",".join(settings.scheduled_source_list))
     if not sources:
         return
+    mode = _due_scan_mode(settings)
     if not scrape_progress.start(mode=mode, sources=sources):
         return
 

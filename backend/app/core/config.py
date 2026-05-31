@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     scrape_interval_minutes: int = 15
     scheduled_scrape_sources: str = "olx,uybor,realt24"
     scheduled_scrape_mode: str = "quick"
+    # Раз в N часов плановый цикл идёт полным сканом (mode="full") вместо
+    # quick. quick обрывается после quick_known_stop_threshold известных и не
+    # дочитывает глубокие страницы — поэтому источник, не добитый разовым
+    # full-сканом, навсегда застревает на верхушке (realt24: 267 из 2224).
+    # full проходит ВСЕ страницы каждого источника и помечает снятые. 0 —
+    # отключить (вернуться к старому поведению «только quick»).
+    full_scan_interval_hours: int = 24
     live_scrape_max_pages: int = 1
     live_scrape_delay_seconds: float = 2.0
     quick_known_stop_threshold: int = 50

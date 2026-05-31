@@ -24,7 +24,7 @@ class Realt24Adapter(SourceAdapter):
     source = "realt24"
     fixture_name = "realt24.html"
     supports_live = True
-    page_size = 20
+    page_size = 12  # реальный pageSize API realt24 (meta.pageSize), не 20
     api_url = "https://api.realt24.uz/api/v1/properties"
     public_url_template = "https://realt24.uz/ru/listing/{source_id}/"
 
