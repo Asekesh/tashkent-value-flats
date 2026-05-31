@@ -47,6 +47,11 @@ def alert_matches_listing(alert: Alert, listing: Listing) -> bool:
         if listing.discount_percent is None or listing.discount_percent < alert.discount_min:
             return False
 
+    if alert.floor_min is not None and (listing.floor or 0) < alert.floor_min:
+        return False
+    if alert.floor_max is not None and (listing.floor or 0) > alert.floor_max:
+        return False
+
     return True
 
 
@@ -76,6 +81,11 @@ def describe_alert(alert: Alert) -> str:
         lo = f"{int(alert.area_min)}" if alert.area_min else "—"
         hi = f"{int(alert.area_max)}" if alert.area_max else "—"
         parts.append(f"📏 {lo}…{hi} м²")
+
+    if alert.floor_min is not None or alert.floor_max is not None:
+        lo = str(int(alert.floor_min)) if alert.floor_min else "—"
+        hi = str(int(alert.floor_max)) if alert.floor_max else "—"
+        parts.append(f"🏢 этаж {lo}…{hi}")
 
     if alert.discount_min is not None:
         parts.append(f"🎯 скидка ≥ {int(alert.discount_min * 100)}%")

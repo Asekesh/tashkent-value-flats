@@ -6,5 +6,6 @@ class NewAlert(StatesGroup):
     rooms = State()
     price = State()
     area = State()
+    floor = State()
     discount = State()
     name = State()

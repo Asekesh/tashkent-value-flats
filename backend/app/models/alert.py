@@ -30,6 +30,8 @@ class Alert(Base):
     area_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     area_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     discount_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    floor_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    floor_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     sources: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

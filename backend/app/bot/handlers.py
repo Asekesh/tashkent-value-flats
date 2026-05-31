@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime
 from typing import Optional
 
@@ -13,11 +12,21 @@ from aiogram.types import CallbackQuery, ErrorEvent, Message
 from sqlalchemy import select
 
 from app.bot.keyboards import (
+    AREA_VALUES,
+    DISCOUNT_PRESETS,
+    FLOOR_VALUES,
+    PRICE_VALUES,
     alert_actions,
+    area_from_keyboard,
+    area_to_keyboard,
+    discount_keyboard,
     districts_keyboard,
+    floor_from_keyboard,
+    floor_to_keyboard,
     main_menu,
+    price_from_keyboard,
+    price_to_keyboard,
     rooms_keyboard,
-    skip_keyboard,
     start_inline,
 )
 from app.bot.matcher import describe_alert
@@ -50,19 +59,21 @@ HELP = (
     "🤖 Бот следит за новыми объявлениями по Ташкенту и шлёт вам уведомления, "
     "как только появится подходящая квартира.\n\n"
     "<b>Как пользоваться:</b>\n"
-    "1️⃣ Нажмите <b>«➕ Новый алёрт»</b> и за пару шагов задайте фильтр "
+    "1️⃣ Нажмите <b>«➕ Новое уведомление»</b> и за пару шагов задайте фильтр "
     "(район, комнаты, цена…).\n"
-    "2️⃣ Бот сам пришлёт уведомление, когда найдётся объявление под ваш фильтр.\n"
-    "3️⃣ В <b>«📋 Мои алёрты»</b> можно поставить на паузу или удалить.\n\n"
+    "2️⃣ Бот сам пришлёт сообщение, когда найдётся квартира под ваш фильтр.\n"
+    "3️⃣ В <b>«📋 Мои уведомления»</b> можно поставить на паузу или удалить.\n\n"
     "<b>Команды:</b>\n"
-    "/new — создать новый алёрт (фильтр)\n"
-    "/list — мои алёрты\n"
+    "/new — настроить уведомления о новых квартирах\n"
+    "/list — мои уведомления\n"
     "/help — помощь"
 )
 
 WELCOME = (
     "Привет! 👋\n\n"
-    "Я помогу не пропустить выгодную квартиру в Ташкенте. "
+    "Я собираю объявления о квартирах в Ташкенте сразу с трёх площадок — "
+    "<b>OLX, Uybor и Realt24</b> — и присылаю уведомление, как только появится "
+    "вариант под ваш фильтр.\n\n"
     "Просто нажмите кнопку ниже — настроим за минуту 👇"
 )
 
@@ -76,21 +87,6 @@ def _ensure_user(tg_id: int, username: Optional[str], first_name: Optional[str])
             db.commit()
             db.refresh(user)
         return user.id
-
-
-def _parse_range(text: str) -> tuple[Optional[float], Optional[float]]:
-    """'30000-50000' / '-50000' / '30000-' / '50000'."""
-    text = text.strip().replace(" ", "").replace("_", "")
-    if not text:
-        return None, None
-    m = re.match(r"^(\d+(?:\.\d+)?)?-(\d+(?:\.\d+)?)?$", text)
-    if m:
-        lo = float(m.group(1)) if m.group(1) else None
-        hi = float(m.group(2)) if m.group(2) else None
-        return lo, hi
-    if text.replace(".", "").isdigit():
-        return float(text), None
-    return None, None
 
 
 # ---------- /start, /help, menu buttons ----------
@@ -123,7 +119,7 @@ async def _begin_new_alert(msg: Message, user, state: FSMContext) -> None:
 
 
 @router.message(Command("new"))
-@router.message(F.text == "➕ Новый алёрт")
+@router.message(F.text == "➕ Новое уведомление")
 async def cmd_new(msg: Message, state: FSMContext) -> None:
     await _begin_new_alert(msg, msg.from_user, state)
 
@@ -198,12 +194,8 @@ async def on_rooms(cb: CallbackQuery, state: FSMContext) -> None:
     if payload == "done":
         await state.set_state(NewAlert.price)
         await cb.message.edit_text(
-            "Шаг 3/6. Цена в USD. Формат:\n"
-            "<code>30000-80000</code> — диапазон\n"
-            "<code>-80000</code> — только верхняя граница\n"
-            "<code>30000-</code> — только нижняя\n"
-            "или нажмите Пропустить.",
-            reply_markup=skip_keyboard("price"),
+            "Шаг 3/7. Цена (USD). Сначала выберите минимум (<b>от</b>):",
+            reply_markup=price_from_keyboard(),
         )
         await cb.answer()
         return
@@ -218,77 +210,121 @@ async def on_rooms(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
-@router.callback_query(F.data == "skip:price")
-async def skip_price(cb: CallbackQuery, state: FSMContext) -> None:
+# ---------- Шаг 3: цена «от» → «до» ----------
+
+@router.callback_query(NewAlert.price, F.data.startswith("pmin:"))
+async def on_price_min(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    if payload == "any":
+        await state.update_data(price_min=None, price_min_idx=None)
+        idx = None
+    else:
+        idx = int(payload)
+        await state.update_data(price_min=float(PRICE_VALUES[idx]), price_min_idx=idx)
+    await cb.message.edit_text(
+        "Шаг 3/7. Теперь максимум цены (<b>до</b>):",
+        reply_markup=price_to_keyboard(idx),
+    )
+    await cb.answer()
+
+
+@router.callback_query(NewAlert.price, F.data.startswith("pmax:"))
+async def on_price_max(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    if payload == "any":
+        await state.update_data(price_max=None)
+    else:
+        await state.update_data(price_max=float(PRICE_VALUES[int(payload)]))
     await state.set_state(NewAlert.area)
     await cb.message.edit_text(
-        "Шаг 4/6. Площадь в м². Формат: <code>40-80</code>, <code>-80</code>, <code>40-</code>.\n"
-        "Или Пропустить.",
-        reply_markup=skip_keyboard("area"),
+        "Шаг 4/7. Площадь, м². Сначала минимум (<b>от</b>):",
+        reply_markup=area_from_keyboard(),
     )
     await cb.answer()
 
 
-@router.message(NewAlert.price)
-async def set_price(msg: Message, state: FSMContext) -> None:
-    lo, hi = _parse_range(msg.text or "")
-    if lo is None and hi is None:
-        await msg.answer("Не понял формат. Пример: <code>30000-80000</code>")
-        return
-    await state.update_data(price_min=lo, price_max=hi)
-    await state.set_state(NewAlert.area)
-    await msg.answer(
-        "Шаг 4/6. Площадь в м². Формат: <code>40-80</code>, <code>-80</code>, <code>40-</code>.\n"
-        "Или Пропустить.",
-        reply_markup=skip_keyboard("area"),
+# ---------- Шаг 4: площадь «от» → «до» ----------
+
+@router.callback_query(NewAlert.area, F.data.startswith("amin:"))
+async def on_area_min(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    if payload == "any":
+        await state.update_data(area_min=None)
+        idx = None
+    else:
+        idx = int(payload)
+        await state.update_data(area_min=float(AREA_VALUES[idx]))
+    await cb.message.edit_text(
+        "Шаг 4/7. Теперь максимум площади (<b>до</b>):",
+        reply_markup=area_to_keyboard(idx),
     )
+    await cb.answer()
 
 
-@router.callback_query(F.data == "skip:area")
-async def skip_area(cb: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(NewAlert.area, F.data.startswith("amax:"))
+async def on_area_max(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    if payload == "any":
+        await state.update_data(area_max=None)
+    else:
+        await state.update_data(area_max=float(AREA_VALUES[int(payload)]))
+    await state.set_state(NewAlert.floor)
+    await cb.message.edit_text(
+        "Шаг 5/7. Этаж. Сначала минимум (<b>от</b>):",
+        reply_markup=floor_from_keyboard(),
+    )
+    await cb.answer()
+
+
+# ---------- Шаг 5: этаж «от» → «до» ----------
+
+@router.callback_query(NewAlert.floor, F.data.startswith("fmin:"))
+async def on_floor_min(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    if payload == "any":
+        await state.update_data(floor_min=None)
+        idx = None
+    else:
+        idx = int(payload)
+        await state.update_data(floor_min=FLOOR_VALUES[idx])
+    await cb.message.edit_text(
+        "Шаг 5/7. Теперь максимум этажа (<b>до</b>):",
+        reply_markup=floor_to_keyboard(idx),
+    )
+    await cb.answer()
+
+
+@router.callback_query(NewAlert.floor, F.data.startswith("fmax:"))
+async def on_floor_max(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    if payload == "any":
+        await state.update_data(floor_max=None)
+    else:
+        await state.update_data(floor_max=FLOOR_VALUES[int(payload)])
     await state.set_state(NewAlert.discount)
     await cb.message.edit_text(
-        "Шаг 5/6. Минимальная скидка к рынку, % (0–50). Например <code>10</code>.\nИли Пропустить.",
-        reply_markup=skip_keyboard("discount"),
+        "Шаг 6/7. Насколько ниже рынка должна быть цена?",
+        reply_markup=discount_keyboard(),
     )
     await cb.answer()
 
 
-@router.message(NewAlert.area)
-async def set_area(msg: Message, state: FSMContext) -> None:
-    lo, hi = _parse_range(msg.text or "")
-    if lo is None and hi is None:
-        await msg.answer("Не понял. Пример: <code>40-80</code>")
-        return
-    await state.update_data(area_min=lo, area_max=hi)
-    await state.set_state(NewAlert.discount)
-    await msg.answer(
-        "Шаг 5/6. Минимальная скидка к рынку, % (0–50). Например <code>10</code>.\nИли Пропустить.",
-        reply_markup=skip_keyboard("discount"),
+# ---------- Шаг 6: скидка к рынку (пресеты) ----------
+
+@router.callback_query(NewAlert.discount, F.data.startswith("disc:"))
+async def on_discount(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    if payload == "any":
+        await state.update_data(discount_min=None)
+    else:
+        _, frac = DISCOUNT_PRESETS[int(payload)]
+        await state.update_data(discount_min=frac)
+    await state.set_state(NewAlert.name)
+    await cb.message.edit_text(
+        "Шаг 7/7. Как назвать этот фильтр? Напишите любое короткое имя "
+        "(например «3-комн. Юнусабад»)."
     )
-
-
-@router.callback_query(F.data == "skip:discount")
-async def skip_discount(cb: CallbackQuery, state: FSMContext) -> None:
-    await state.set_state(NewAlert.name)
-    await cb.message.edit_text("Шаг 6/6. Как назвать алёрт? Любое короткое имя.")
     await cb.answer()
-
-
-@router.message(NewAlert.discount)
-async def set_discount(msg: Message, state: FSMContext) -> None:
-    text = (msg.text or "").strip().replace("%", "")
-    try:
-        pct = float(text)
-    except ValueError:
-        await msg.answer("Введите число от 0 до 50 (процентов).")
-        return
-    if pct < 0 or pct > 50:
-        await msg.answer("Введите число от 0 до 50.")
-        return
-    await state.update_data(discount_min=pct / 100.0)
-    await state.set_state(NewAlert.name)
-    await msg.answer("Шаг 6/6. Как назвать алёрт? Любое короткое имя.")
 
 
 @router.message(NewAlert.name)
@@ -310,6 +346,8 @@ async def set_name(msg: Message, state: FSMContext) -> None:
             price_max=data.get("price_max"),
             area_min=data.get("area_min"),
             area_max=data.get("area_max"),
+            floor_min=data.get("floor_min"),
+            floor_max=data.get("floor_max"),
             discount_min=data.get("discount_min"),
             is_active=True,
             created_at=datetime.utcnow(),
@@ -321,8 +359,8 @@ async def set_name(msg: Message, state: FSMContext) -> None:
 
     await state.clear()
     await msg.answer(
-        f"✅ Алёрт <b>«{name}»</b> создан.\n\n{summary}\n\n"
-        "Теперь я пришлю сообщение как только появится подходящий листинг.",
+        f"✅ Уведомление <b>«{name}»</b> создано.\n\n{summary}\n\n"
+        "Теперь я пришлю сообщение, как только появится подходящая квартира.",
         reply_markup=main_menu(),
     )
 
@@ -338,19 +376,19 @@ async def _send_alerts(msg: Message, user) -> None:
 
     if not alerts:
         await msg.answer(
-            "Алёртов пока нет. Нажмите «➕ Новый алёрт», чтобы создать первый.",
+            "Уведомлений пока нет. Нажмите «➕ Новое уведомление», чтобы создать первое.",
             reply_markup=main_menu(),
         )
         return
 
     for a in alerts:
-        status = "🟢 активен" if a.is_active else "⏸ на паузе"
+        status = "🟢 активно" if a.is_active else "⏸ на паузе"
         text = f"<b>{a.name}</b> · {status}\n\n{describe_alert(a)}"
         await msg.answer(text, reply_markup=alert_actions(a.id, a.is_active))
 
 
 @router.message(Command("list"))
-@router.message(F.text == "📋 Мои алёрты")
+@router.message(F.text == "📋 Мои уведомления")
 async def cmd_list(msg: Message) -> None:
     await _send_alerts(msg, msg.from_user)
 
@@ -363,7 +401,7 @@ async def on_toggle(cb: CallbackQuery) -> None:
         if alert is None or alert.user_id != _ensure_user(
             cb.from_user.id, cb.from_user.username, cb.from_user.first_name
         ):
-            await cb.answer("Не нашёл алёрт.", show_alert=True)
+            await cb.answer("Не нашёл уведомление.", show_alert=True)
             return
         alert.is_active = not alert.is_active
         db.commit()
@@ -371,7 +409,7 @@ async def on_toggle(cb: CallbackQuery) -> None:
         name = alert.name
         summary = describe_alert(alert)
 
-    status = "🟢 активен" if new_state else "⏸ на паузе"
+    status = "🟢 активно" if new_state else "⏸ на паузе"
     await cb.message.edit_text(
         f"<b>{name}</b> · {status}\n\n{summary}",
         reply_markup=alert_actions(alert_id, new_state),
@@ -387,10 +425,10 @@ async def on_delete(cb: CallbackQuery) -> None:
         if alert is None or alert.user_id != _ensure_user(
             cb.from_user.id, cb.from_user.username, cb.from_user.first_name
         ):
-            await cb.answer("Не нашёл алёрт.", show_alert=True)
+            await cb.answer("Не нашёл уведомление.", show_alert=True)
             return
         db.delete(alert)
         db.commit()
 
-    await cb.message.edit_text("🗑 Удалён.")
+    await cb.message.edit_text("🗑 Уведомление удалено.")
     await cb.answer()
