@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 from typing import Optional
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, ErrorEvent, Message
 from sqlalchemy import select
 
 from app.bot.keyboards import (
@@ -16,6 +18,7 @@ from app.bot.keyboards import (
     main_menu,
     rooms_keyboard,
     skip_keyboard,
+    start_inline,
 )
 from app.bot.matcher import describe_alert
 from app.bot.states import NewAlert
@@ -24,13 +27,43 @@ from app.models import Alert, User
 from app.services.normalization import CANONICAL_DISTRICTS
 
 router = Router(name="bot.handlers")
+logger = logging.getLogger(__name__)
+
+
+@router.errors()
+async def on_bot_error(event: ErrorEvent) -> bool:
+    """Не давать одному кривому апдейту валить polling и шуметь трейсбеком.
+
+    Частый безобидный кейс: юзер кликает уже выбранную inline-кнопку →
+    мы правим сообщение тем же содержимым, и Телеграм отвечает 400
+    "message is not modified". Это не ошибка — глушим молча. Остальное
+    логируем (через app.bot logger) и помечаем как обработанное, чтобы
+    aiogram не дублировал сырой трейсбек.
+    """
+    exc = event.exception
+    if isinstance(exc, TelegramBadRequest) and "message is not modified" in str(exc):
+        return True
+    logger.error("bot handler failed", exc_info=exc)
+    return True
 
 HELP = (
-    "🤖 Бот следит за новыми объявлениями по Ташкенту и шлёт вам уведомления.\n\n"
-    "Команды:\n"
+    "🤖 Бот следит за новыми объявлениями по Ташкенту и шлёт вам уведомления, "
+    "как только появится подходящая квартира.\n\n"
+    "<b>Как пользоваться:</b>\n"
+    "1️⃣ Нажмите <b>«➕ Новый алёрт»</b> и за пару шагов задайте фильтр "
+    "(район, комнаты, цена…).\n"
+    "2️⃣ Бот сам пришлёт уведомление, когда найдётся объявление под ваш фильтр.\n"
+    "3️⃣ В <b>«📋 Мои алёрты»</b> можно поставить на паузу или удалить.\n\n"
+    "<b>Команды:</b>\n"
     "/new — создать новый алёрт (фильтр)\n"
     "/list — мои алёрты\n"
     "/help — помощь"
+)
+
+WELCOME = (
+    "Привет! 👋\n\n"
+    "Я помогу не пропустить выгодную квартиру в Ташкенте. "
+    "Просто нажмите кнопку ниже — настроим за минуту 👇"
 )
 
 
@@ -65,10 +98,9 @@ def _parse_range(text: str) -> tuple[Optional[float], Optional[float]]:
 @router.message(CommandStart())
 async def cmd_start(msg: Message) -> None:
     _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
-    await msg.answer(
-        "Привет! 👋\n\n" + HELP,
-        reply_markup=main_menu(),
-    )
+    # сначала ставим reply-клавиатуру, затем — крупные inline-кнопки для новичков
+    await msg.answer(WELCOME, reply_markup=main_menu())
+    await msg.answer("Что хотите сделать?", reply_markup=start_inline())
 
 
 @router.message(Command("help"))
@@ -79,10 +111,8 @@ async def cmd_help(msg: Message) -> None:
 
 # ---------- /new flow ----------
 
-@router.message(Command("new"))
-@router.message(F.text == "➕ Новый алёрт")
-async def cmd_new(msg: Message, state: FSMContext) -> None:
-    _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
+async def _begin_new_alert(msg: Message, user, state: FSMContext) -> None:
+    _ensure_user(user.id, user.username, user.first_name)
     await state.clear()
     await state.set_state(NewAlert.districts)
     await state.update_data(districts=set())
@@ -90,6 +120,32 @@ async def cmd_new(msg: Message, state: FSMContext) -> None:
         "Шаг 1/6. Выберите районы (можно несколько):",
         reply_markup=districts_keyboard(set()),
     )
+
+
+@router.message(Command("new"))
+@router.message(F.text == "➕ Новый алёрт")
+async def cmd_new(msg: Message, state: FSMContext) -> None:
+    await _begin_new_alert(msg, msg.from_user, state)
+
+
+# ---------- inline-кнопки стартового экрана ----------
+
+@router.callback_query(F.data == "start:new")
+async def start_new(cb: CallbackQuery, state: FSMContext) -> None:
+    await _begin_new_alert(cb.message, cb.from_user, state)
+    await cb.answer()
+
+
+@router.callback_query(F.data == "start:list")
+async def start_list(cb: CallbackQuery) -> None:
+    await _send_alerts(cb.message, cb.from_user)
+    await cb.answer()
+
+
+@router.callback_query(F.data == "start:help")
+async def start_help(cb: CallbackQuery) -> None:
+    await cb.message.answer(HELP, reply_markup=main_menu())
+    await cb.answer()
 
 
 @router.callback_query(NewAlert.districts, F.data.startswith("dist:"))
@@ -273,23 +329,30 @@ async def set_name(msg: Message, state: FSMContext) -> None:
 
 # ---------- /list ----------
 
-@router.message(Command("list"))
-@router.message(F.text == "📋 Мои алёрты")
-async def cmd_list(msg: Message) -> None:
-    user_id = _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
+async def _send_alerts(msg: Message, user) -> None:
+    user_id = _ensure_user(user.id, user.username, user.first_name)
     with SessionLocal() as db:
         alerts = db.scalars(
             select(Alert).where(Alert.user_id == user_id).order_by(Alert.id.desc())
         ).all()
 
     if not alerts:
-        await msg.answer("Алёртов пока нет. Создайте через /new.", reply_markup=main_menu())
+        await msg.answer(
+            "Алёртов пока нет. Нажмите «➕ Новый алёрт», чтобы создать первый.",
+            reply_markup=main_menu(),
+        )
         return
 
     for a in alerts:
         status = "🟢 активен" if a.is_active else "⏸ на паузе"
         text = f"<b>{a.name}</b> · {status}\n\n{describe_alert(a)}"
         await msg.answer(text, reply_markup=alert_actions(a.id, a.is_active))
+
+
+@router.message(Command("list"))
+@router.message(F.text == "📋 Мои алёрты")
+async def cmd_list(msg: Message) -> None:
+    await _send_alerts(msg, msg.from_user)
 
 
 @router.callback_query(F.data.startswith("toggle:"))
