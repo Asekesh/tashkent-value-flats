@@ -327,10 +327,16 @@
               });
             }
             var name = me.first_name || me.username || ("id" + me.telegram_id);
+            var botUser = "";
+            try {
+              var authCfg = await fetch("/auth/config").then(function (r) { return r.json(); });
+              if (authCfg && authCfg.bot_username) botUser = authCfg.bot_username;
+            } catch (e) { /* keep going without the bot link */ }
             box.innerHTML =
               '<span class="auth-user">' +
               (me.photo_url ? '<img src="' + me.photo_url + '" alt="" />' : "") +
               "<span>" + name + (me.role === "admin" ? " · админ" : "") + "</span></span>" +
+              (botUser ? '<a class="auth-bot" href="https://t.me/' + botUser + '" target="_blank" rel="noopener">Открыть бота</a>' : "") +
               '<a class="auth-logout" href="/auth/logout">Выйти</a>';
             return;
           }
