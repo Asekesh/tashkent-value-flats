@@ -217,6 +217,26 @@ button:disabled {
   gap: 10px;
   min-height: 72px;
   padding: var(--sp-6);
+  text-decoration: none;
+}
+
+.brand:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.brand-name strong {
+  color: var(--color-text);
+  display: block;
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-extra);
+  letter-spacing: -0.03em;
+  line-height: var(--lh-none);
+  white-space: nowrap;
+}
+
+.brand-name span {
+  margin-top: var(--sp-3);
 }
 
 .brand-mark,
@@ -1478,6 +1498,18 @@ select:focus {
     flex-wrap: wrap;
   }
 
+  .topbar .tg-cta {
+    align-items: flex-start;
+  }
+
+  .topbar .tg-promo-text {
+    text-align: left;
+  }
+
+  .topbar .tg-promo-text strong {
+    justify-content: flex-start;
+  }
+
   .page-heading h2 {
     font-size: var(--fs-xl);
   }
@@ -2264,6 +2296,93 @@ select:focus {
 
 
 /* Telegram login widget */
+.tg-cta {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.tg-cta .auth-box {
+  min-height: 0;
+}
+
+.tg-promo-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  line-height: var(--lh-tight);
+  text-align: right;
+}
+.tg-promo-text[hidden] {
+  display: none;
+}
+.tg-promo-text strong {
+  align-items: center;
+  color: var(--color-text);
+  display: inline-flex;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-extra);
+  gap: var(--sp-3);
+  justify-content: flex-end;
+}
+.tg-promo-text strong .ic {
+  color: var(--color-primary);
+  height: 16px;
+  width: 16px;
+}
+.tg-promo-text span {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+/* Favorites registration CTA */
+.fav-cta {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-6);
+  padding: var(--sp-8) var(--sp-7);
+  text-align: center;
+}
+.fav-cta[hidden] {
+  display: none;
+}
+.fav-cta-icon {
+  align-items: center;
+  background: var(--color-primary-tint);
+  border-radius: var(--radius-circle);
+  color: var(--color-primary);
+  display: flex;
+  height: 56px;
+  justify-content: center;
+  width: 56px;
+}
+.fav-cta-icon .ic {
+  height: 28px;
+  width: 28px;
+}
+.fav-cta h3 {
+  color: var(--color-text);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-extra);
+  margin: 0;
+  max-width: 30ch;
+}
+.fav-cta p {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  margin: 0;
+  max-width: 460px;
+}
+.fav-cta-auth {
+  min-height: 40px;
+}
+
 .auth-box {
   display: flex;
   align-items: center;

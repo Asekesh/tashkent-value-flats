@@ -3,9 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ташкент Недвижимость</title>
+    <title>uyradar.uz — квартиры ниже рынка в Ташкенте</title>
+    <link rel="canonical" href="https://uyradar.uz/" />
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260528-multidistrict3" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260531-brand-tg7" />
   </head>
   <body>
     <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" focusable="false">
@@ -38,16 +39,17 @@
       <symbol id="i-trending-up" viewBox="0 0 24 24"><path d="M3 18l8-8 4 4 6-6"/><path d="M21 8V4h-4"/></symbol>
       <symbol id="i-percent" viewBox="0 0 24 24"><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M19 5 5 19"/></symbol>
       <symbol id="i-ruler" viewBox="0 0 24 24"><path d="m17 3 4 4-14 14-4-4z"/><path d="m8 7 2 2M11 4l2 2M14 7l2 2M5 10l2 2M11 10l2 2M5 16l2 2"/></symbol>
+      <symbol id="i-telegram" viewBox="0 0 24 24"><path d="M21.5 4.3 2.9 11.5c-1 .4-1 1.4-.2 1.7l4.7 1.5L19 6.6c.5-.4 1-.2.6.2l-9 8.2-.3 4.6c.4 0 .6-.2.8-.4l2-1.9 4.7 3.5c.9.5 1.5.2 1.7-.8L23 5.5c.3-1.2-.5-1.7-1.5-1.2z" fill="currentColor" stroke="none"/></symbol>
     </svg>
     <main class="app-shell">
       <aside class="sidebar">
-        <div class="brand">
-          <img class="brand-logo" src="/static/favicon.png?v=20260511-cma2" alt="Логотип" />
-          <div>
-            <strong>Ташкент Недвижимость</strong>
-            <span>Квартиры и дома в столице</span>
+        <a class="brand" href="/" aria-label="uyradar.uz — на главную">
+          <img class="brand-logo" src="/static/favicon.png?v=20260511-cma2" alt="uyradar.uz" />
+          <div class="brand-name">
+            <strong>uyradar.uz</strong>
+            <span>Аналитика квартир в Ташкенте</span>
           </div>
-        </div>
+        </a>
         <nav class="nav-list" aria-label="Основная навигация">
           <p>Навигация</p>
           <button class="nav-item active" data-view-button="dashboard" type="button"><span><svg class="ic"><use href="#i-home"/></svg></span><span><strong>Главная</strong><small>лучшие сделки</small></span></button>
@@ -64,12 +66,17 @@
 
       <div class="main-shell">
         <header class="topbar">
-          <div>
-            <h1>Рабочая панель цен ниже рынка</h1>
+          <div class="topbar-lead">
+            <span id="status" class="status">Готово</span>
           </div>
           <div class="topbar-actions">
-            <span id="status" class="status">Готово</span>
-            <div id="authBox" class="auth-box"></div>
+            <div class="tg-cta">
+              <div id="authBox" class="auth-box"></div>
+              <div id="tgPromoText" class="tg-promo-text">
+                <strong><svg class="ic"><use href="#i-telegram"/></svg> Новые квартиры — в Telegram</strong>
+                <span>Зарегистрируйтесь и первыми получайте объявления ниже рынка</span>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -203,6 +210,12 @@
             </div>
             <button class="btn btn-ghost" data-open-listings type="button">К объявлениям <svg class="ic"><use href="#i-arrow-right"/></svg></button>
           </div>
+          <section id="favoritesAuthCta" class="fav-cta" hidden>
+            <div class="fav-cta-icon"><svg class="ic"><use href="#i-telegram"/></svg></div>
+            <h3>Сохраняйте избранное — зарегистрируйтесь через Telegram</h3>
+            <p>Получайте уведомления о новых квартирах ниже рынка и сохраняйте понравившиеся объекты, чтобы не упустить выгодные сделки.</p>
+            <div id="favoritesAuthBox" class="fav-cta-auth"></div>
+          </section>
           <section id="favoritesList" class="deal-list"></section>
         </section>
 
@@ -276,9 +289,23 @@
       (async function () {
         var box = document.getElementById("authBox");
         if (!box) return;
+        var promo = document.getElementById("tgPromoText");
+        var favCta = document.getElementById("favoritesAuthCta");
+        function telegramWidget(username, size) {
+          var s = document.createElement("script");
+          s.async = true;
+          s.src = "https://telegram.org/js/telegram-widget.js?22";
+          s.setAttribute("data-telegram-login", username);
+          s.setAttribute("data-size", size);
+          s.setAttribute("data-auth-url", "/auth/telegram/callback");
+          s.setAttribute("data-request-access", "write");
+          return s;
+        }
         try {
           var me = await fetch("/auth/me", { credentials: "same-origin" }).then(function (r) { return r.json(); });
           if (me && me.authenticated) {
+            if (promo) promo.hidden = true;
+            if (favCta) favCta.hidden = true;
             if (me.role === "admin") {
               ["adminPanelLink", "scrapeAdminNav"].forEach(function (id) {
                 var el = document.getElementById(id);
@@ -295,19 +322,17 @@
           }
           var cfg = await fetch("/auth/config").then(function (r) { return r.json(); });
           if (!cfg || !cfg.bot_username) {
-            box.innerHTML = '<span class="auth-hint">Вход не настроен</span>';
+            // Auth not configured — hide the prompts entirely, keep the site open.
+            if (promo) promo.hidden = true;
             return;
           }
-          var s = document.createElement("script");
-          s.async = true;
-          s.src = "https://telegram.org/js/telegram-widget.js?22";
-          s.setAttribute("data-telegram-login", cfg.bot_username);
-          s.setAttribute("data-size", "medium");
-          s.setAttribute("data-auth-url", "/auth/telegram/callback");
-          s.setAttribute("data-request-access", "write");
-          box.appendChild(s);
+          box.appendChild(telegramWidget(cfg.bot_username, "medium"));
+          var favBox = document.getElementById("favoritesAuthBox");
+          if (favBox) favBox.appendChild(telegramWidget(cfg.bot_username, "large"));
+          if (favCta) favCta.hidden = false;
         } catch (e) {
           /* public site keeps working even if auth endpoints fail */
+          if (promo) promo.hidden = true;
         }
       })();
     </script>
