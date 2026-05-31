@@ -12,6 +12,17 @@
 </div>
 
 <div class="section">
+  <h2>Бот</h2>
+  <div class="cards">
+    <div class="card"><div class="label">Зарегистрировано</div><div class="value">{{ metrics.total_users }}</div></div>
+    <div class="card"><div class="label">Пользуются ботом</div><div class="value">{{ metrics.bot_users }}</div></div>
+    <div class="card"><div class="label">Активных подписчиков</div><div class="value">{{ metrics.bot_active_users }}</div></div>
+    <div class="card"><div class="label">Всего алёртов</div><div class="value">{{ metrics.total_alerts }}</div></div>
+    <div class="card"><div class="label">Активных алёртов</div><div class="value">{{ metrics.active_alerts }}</div></div>
+  </div>
+</div>
+
+<div class="section">
   <h2>По типу аккаунта</h2>
   <div class="cards">
     <div class="card"><div class="label">Физлица</div><div class="value">{{ metrics.account_types.individual }}</div></div>

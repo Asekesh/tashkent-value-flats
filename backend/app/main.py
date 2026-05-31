@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 import asyncio
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +32,26 @@ from app.services.scheduler import (
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _configure_bot_logging() -> None:
+    """Поднять INFO-логи бота/notifier/aiogram в stdout Railway.
+
+    uvicorn вешает хендлер только на свои логгеры, рутовый остаётся пустым —
+    поэтому INFO от app.bot и aiogram тонут (видны лишь ERROR через lastResort).
+    Даём этим двум логгерам собственный stream-хендлер с propagate=False:
+    видно `notifier_loop started` и `Run polling for bot ...`, без потопа от
+    остального app. Идемпотентно — перезаписываем handlers списком.
+    """
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    for name in ("app.bot", "aiogram"):
+        lg = logging.getLogger(name)
+        lg.setLevel(logging.INFO)
+        lg.handlers = [handler]
+        lg.propagate = False
 
 
 def _ensure_trigger_columns() -> None:
@@ -71,6 +92,7 @@ def _ensure_market_columns() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _configure_bot_logging()
     Base.metadata.create_all(bind=engine)
     _ensure_trigger_columns()
     _ensure_market_columns()

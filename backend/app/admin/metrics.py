@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import LoginEvent, Subscription, User
+from app.models import Alert, LoginEvent, Subscription, User
 
 
 def _active_subscription_filter():
@@ -72,6 +72,24 @@ def dashboard_metrics(db: Session) -> dict[str, Any]:
         else:
             plans[plan] = plans.get(plan, 0) + count
 
+    # --- Бот: воронка по алёртам (алёрты создаются только в боте) ---
+    # «Пользуются ботом» = есть хотя бы один алёрт; «активных» = есть хотя бы
+    # один активный алёрт (по нему сейчас идут уведомления). Зарегистрировано
+    # = total_users (таблица users общая с веб-логином, отдельного флага нет).
+    bot_users = db.scalar(select(func.count(func.distinct(Alert.user_id)))) or 0
+    bot_active_users = (
+        db.scalar(
+            select(func.count(func.distinct(Alert.user_id))).where(
+                Alert.is_active.is_(True)
+            )
+        )
+        or 0
+    )
+    total_alerts = db.scalar(select(func.count(Alert.id))) or 0
+    active_alerts = (
+        db.scalar(select(func.count(Alert.id)).where(Alert.is_active.is_(True))) or 0
+    )
+
     # Registrations per day, last 30 days, gap-filled.
     raw_counts: dict[str, int] = {}
     for day, count in db.execute(
@@ -96,6 +114,10 @@ def dashboard_metrics(db: Session) -> dict[str, Any]:
         "plans": plans,
         "registrations": registrations,
         "registrations_max": max_reg,
+        "bot_users": bot_users,
+        "bot_active_users": bot_active_users,
+        "total_alerts": total_alerts,
+        "active_alerts": active_alerts,
     }
 
 
