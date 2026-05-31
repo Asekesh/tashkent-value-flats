@@ -13,6 +13,7 @@ from sqlalchemy import delete, inspect, select, func, text
 from app.admin.router import router as admin_panel_router
 from app.api import admin, listings, onboarding
 from app.auth.router import router as auth_router
+from app.bot import notifier_loop, start_bot_polling, stop_bot
 from app.core.config import get_settings
 from app.legal.router import router as legal_router
 from app.db.session import Base, SessionLocal, engine
@@ -117,10 +118,17 @@ async def lifespan(_: FastAPI):
     market_rebuild_task: asyncio.Task | None = asyncio.create_task(
         scheduled_market_rebuild_loop()
     )
+    bot_task: asyncio.Task | None = None
+    notifier_task: asyncio.Task | None = None
+    if settings.telegram_bot_token:
+        bot_task = asyncio.create_task(start_bot_polling())
+        notifier_task = asyncio.create_task(notifier_loop())
     yield
     await stop_scheduler(scheduler_task)
     await stop_scheduler(olx_sweep_task)
     await stop_scheduler(market_rebuild_task)
+    await stop_scheduler(notifier_task)
+    await stop_bot(bot_task)
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
