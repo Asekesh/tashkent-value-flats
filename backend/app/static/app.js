@@ -50,6 +50,15 @@ const taskListEl = document.querySelector("#taskList");
 let progressPollTimer = null;
 let tasksState = [];
 
+// Сбор данных («поиск») виден только админу — публичные посетители его не замечают.
+let isAdmin = false;
+const adminReady = fetch("/auth/me", { credentials: "same-origin" })
+  .then((r) => r.json())
+  .then((me) => {
+    isAdmin = !!(me && me.role === "admin");
+  })
+  .catch(() => {});
+
 document.querySelector("#adminImportButton").addEventListener("click", () => runScrapeMode("quick"));
 document.querySelector("#quickScanButton").addEventListener("click", () => runScrapeMode("quick"));
 document.querySelector("#fullScanButton").addEventListener("click", () => runScrapeMode("full"));
@@ -175,9 +184,11 @@ async function pollProgressOnce() {
       stopProgressPolling();
       if (state.started_at) {
         const total = state.new_total ?? 0;
-        statusEl.textContent = state.last_error
-          ? `Ошибка сбора: ${state.last_error}`
-          : `Готово: добавлено ${total}, страниц ${state.pages_scanned}`;
+        if (isAdmin) {
+          statusEl.textContent = state.last_error
+            ? `Ошибка сбора: ${state.last_error}`
+            : `Готово: добавлено ${total}, страниц ${state.pages_scanned}`;
+        }
         await fetchListings(readFilters(), 0);
         await fetchTasks();
         await fetchDashboardStats();
@@ -1278,6 +1289,8 @@ renderSourceStats();
 resumeProgressIfRunning();
 
 async function resumeProgressIfRunning() {
+  await adminReady;
+  if (!isAdmin) return;
   try {
     const response = await fetch("/api/admin/scrape/progress");
     if (!response.ok) return;
