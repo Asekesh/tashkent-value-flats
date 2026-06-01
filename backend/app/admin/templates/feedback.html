@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Обратная связь{% endblock %}
+{% block content %}
+<h1>Обратная связь <span style="color:#94a3b8;font-weight:400;">· {{ total }}</span></h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Дата</th><th>Тип</th><th>Источник</th><th>Автор</th><th>Сообщение</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for fb in rows %}
+    <tr>
+      <td style="white-space:nowrap;">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at else "—" }}</td>
+      <td>
+        {% if fb.kind == "bug" %}<span class="pill pill-admin">Ошибка</span>
+        {% else %}<span class="pill pill-pro">Пожелание</span>{% endif %}
+      </td>
+      <td><span class="pill pill-{{ 'agent' if fb.source == 'bot' else 'individual' }}">{{ fb.source }}</span></td>
+      <td>{{ fb.contact or "—" }}</td>
+      <td style="white-space:pre-wrap;">{{ fb.message }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="text-align:center;color:#94a3b8;">Пока нет сообщений</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="pager">
+  {% if page > 1 %}<a href="/admin/feedback?page={{ page - 1 }}">← назад</a>{% endif %}
+  <span>Страница {{ page }} из {{ pages }}</span>
+  {% if page < pages %}<a href="/admin/feedback?page={{ page + 1 }}">вперёд →</a>{% endif %}
+</div>
+{% endblock %}

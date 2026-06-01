@@ -9,7 +9,7 @@ def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="➕ Новое уведомление"), KeyboardButton(text="📋 Мои уведомления")],
-            [KeyboardButton(text="ℹ️ Помощь")],
+            [KeyboardButton(text="✍️ Обратная связь"), KeyboardButton(text="ℹ️ Помощь")],
         ],
         resize_keyboard=True,
         input_field_placeholder="Нажмите кнопку ниже 👇",
@@ -22,8 +22,18 @@ def start_inline() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Создать уведомление о новых квартирах", callback_data="start:new")],
             [InlineKeyboardButton(text="📋 Мои уведомления", callback_data="start:list")],
+            [InlineKeyboardButton(text="✍️ Обратная связь", callback_data="start:feedback")],
             [InlineKeyboardButton(text="ℹ️ Как это работает", callback_data="start:help")],
         ]
+    )
+
+
+def feedback_kind_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="🐞 Ошибка", callback_data="fb:bug"),
+            InlineKeyboardButton(text="💡 Пожелание", callback_data="fb:feature"),
+        ]]
     )
 
 

@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, inspect, select, func, text
 
 from app.admin.router import router as admin_panel_router
-from app.api import admin, listings, onboarding
+from app.api import admin, feedback, listings, onboarding
 from app.auth.router import router as auth_router
 from app.bot import notifier_loop, start_bot_polling, stop_bot
 from app.core.config import get_settings
@@ -177,6 +177,7 @@ def health() -> dict[str, str]:
 app.include_router(listings.router)
 app.include_router(admin.router)
 app.include_router(onboarding.router)
+app.include_router(feedback.router)
 app.include_router(auth_router)
 app.include_router(admin_panel_router)
 app.include_router(legal_router)

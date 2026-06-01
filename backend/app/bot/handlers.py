@@ -21,6 +21,7 @@ from app.bot.keyboards import (
     area_to_keyboard,
     discount_keyboard,
     districts_keyboard,
+    feedback_kind_keyboard,
     floor_from_keyboard,
     floor_to_keyboard,
     main_menu,
@@ -30,9 +31,10 @@ from app.bot.keyboards import (
     start_inline,
 )
 from app.bot.matcher import describe_alert
-from app.bot.states import NewAlert
+from app.bot.states import Feedback, NewAlert
 from app.db.session import SessionLocal
-from app.models import Alert, User
+from app.models import Alert, Feedback as FeedbackModel, User
+from app.services.feedback_notify import notify_admins_new_feedback
 from app.services.normalization import CANONICAL_DISTRICTS
 
 router = Router(name="bot.handlers")
@@ -103,6 +105,71 @@ async def cmd_start(msg: Message) -> None:
 @router.message(F.text == "ℹ️ Помощь")
 async def cmd_help(msg: Message) -> None:
     await msg.answer(HELP, reply_markup=main_menu())
+
+
+# ---------- Обратная связь ----------
+
+async def _begin_feedback(msg: Message, state: FSMContext) -> None:
+    await state.clear()
+    await state.set_state(Feedback.kind)
+    await msg.answer(
+        "Спасибо, что помогаете нам стать лучше! Что хотите сообщить?",
+        reply_markup=feedback_kind_keyboard(),
+    )
+
+
+@router.message(F.text == "✍️ Обратная связь")
+async def cmd_feedback(msg: Message, state: FSMContext) -> None:
+    await _begin_feedback(msg, state)
+
+
+@router.callback_query(F.data == "start:feedback")
+async def start_feedback(cb: CallbackQuery, state: FSMContext) -> None:
+    await _begin_feedback(cb.message, state)
+    await cb.answer()
+
+
+@router.callback_query(Feedback.kind, F.data.startswith("fb:"))
+async def on_feedback_kind(cb: CallbackQuery, state: FSMContext) -> None:
+    kind = cb.data.split(":", 1)[1]
+    await state.update_data(kind=kind)
+    await state.set_state(Feedback.text)
+    prompt = (
+        "Опишите ошибку — что произошло и что ожидали 👇"
+        if kind == "bug"
+        else "Напишите ваше пожелание или идею 👇"
+    )
+    await cb.message.edit_text(prompt)
+    await cb.answer()
+
+
+@router.message(Feedback.text)
+async def on_feedback_text(msg: Message, state: FSMContext) -> None:
+    text = (msg.text or "").strip()[:2000]
+    if not text:
+        await msg.answer("Напишите, пожалуйста, текст сообщения.")
+        return
+    data = await state.get_data()
+    kind = data.get("kind") or "bug"
+    user_id = _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
+    contact = msg.from_user.username or msg.from_user.first_name or f"id{msg.from_user.id}"
+
+    with SessionLocal() as db:
+        db.add(FeedbackModel(
+            user_id=user_id,
+            kind=kind,
+            message=text,
+            source="bot",
+            contact=contact,
+        ))
+        db.commit()
+
+    notify_admins_new_feedback(kind, text, contact, "bot")
+    await state.clear()
+    await msg.answer(
+        "✅ Спасибо! Сообщение отправлено — мы обязательно его прочитаем.",
+        reply_markup=main_menu(),
+    )
 
 
 # ---------- /new flow ----------

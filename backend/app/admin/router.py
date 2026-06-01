@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.admin.metrics import active_plan_by_user, dashboard_metrics
 from app.auth.dependencies import require_admin
 from app.db.session import get_db
-from app.models import User
+from app.models import Feedback, User
 
 router = APIRouter(prefix="/admin", tags=["admin-panel"])
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -73,6 +73,37 @@ def admin_users(
             "pages": pages,
             "total": total,
             "q": query,
+        },
+    )
+
+
+@router.get("/feedback")
+def admin_feedback(
+    request: Request,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+):
+    total = db.scalar(select(func.count()).select_from(Feedback)) or 0
+    pages = max(math.ceil(total / PAGE_SIZE), 1)
+    page = min(page, pages)
+    rows = list(
+        db.scalars(
+            select(Feedback)
+            .order_by(Feedback.created_at.desc())
+            .offset((page - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+        ).all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "feedback.html",
+        {
+            "admin": admin,
+            "rows": rows,
+            "page": page,
+            "pages": pages,
+            "total": total,
         },
     )
 

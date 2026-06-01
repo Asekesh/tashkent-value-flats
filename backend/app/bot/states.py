@@ -9,3 +9,8 @@ class NewAlert(StatesGroup):
     floor = State()
     discount = State()
     name = State()
+
+
+class Feedback(StatesGroup):
+    kind = State()
+    text = State()

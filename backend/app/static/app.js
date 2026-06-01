@@ -67,6 +67,7 @@ document.querySelector("#applyButton").addEventListener("click", () => fetchList
 document.querySelector("#resetButton").addEventListener("click", resetFilters);
 document.querySelector("#refreshRunsButton").addEventListener("click", fetchTasks);
 document.querySelector("#refreshSourcePagesButton").addEventListener("click", fetchSourceStats);
+document.querySelector("#feedbackNav").addEventListener("click", showFeedbackModal);
 document.querySelectorAll("[data-open-listings]").forEach((button) => button.addEventListener("click", () => setView("listings")));
 document.querySelectorAll("[data-view-button]").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.viewButton));
@@ -784,6 +785,91 @@ function showCmaModal(listing) {
 function closeCma() {
   const overlay = document.querySelector("#cmaOverlay");
   if (overlay) overlay.classList.remove("active");
+}
+
+// ---------- Обратная связь (тикеты) ----------
+
+function showFeedbackModal() {
+  let overlay = document.querySelector("#feedbackOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "feedbackOverlay";
+    overlay.className = "cma-overlay fb-overlay";
+    overlay.innerHTML = `
+      <div class="cma-modal fb-modal">
+        <header class="cma-header">
+          <div>
+            <h2>Обратная связь</h2>
+            <p>Нашли ошибку или есть пожелание? Напишите — мы прочитаем каждое сообщение.</p>
+          </div>
+          <button class="icon-button" id="feedbackCloseButton" type="button" aria-label="Закрыть">${icon("xmark")}</button>
+        </header>
+        <div class="cma-body fb-body">
+          <div class="fb-segmented" role="radiogroup" aria-label="Тип обращения">
+            <label class="fb-segment"><input type="radio" name="fbKind" value="bug" checked /><span>Ошибка</span></label>
+            <label class="fb-segment"><input type="radio" name="fbKind" value="feature" /><span>Пожелание</span></label>
+          </div>
+          <textarea id="feedbackText" class="fb-textarea" rows="5" maxlength="2000" placeholder="Опишите проблему или идею..."></textarea>
+          <div class="fb-footer">
+            <span id="feedbackStatus" class="fb-status"></span>
+            <button id="feedbackSubmit" class="btn btn-primary" type="button">Отправить</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeFeedback();
+    });
+    overlay.querySelector("#feedbackCloseButton").addEventListener("click", closeFeedback);
+    overlay.querySelector("#feedbackSubmit").addEventListener("click", submitFeedback);
+  }
+  overlay.querySelector("#feedbackText").value = "";
+  overlay.querySelector("#feedbackStatus").textContent = "";
+  overlay.querySelector("#feedbackStatus").className = "fb-status";
+  overlay.querySelector("#feedbackSubmit").disabled = false;
+  overlay.classList.add("active");
+}
+
+function closeFeedback() {
+  const overlay = document.querySelector("#feedbackOverlay");
+  if (overlay) overlay.classList.remove("active");
+}
+
+async function submitFeedback() {
+  const overlay = document.querySelector("#feedbackOverlay");
+  if (!overlay) return;
+  const statusEl = overlay.querySelector("#feedbackStatus");
+  const submitBtn = overlay.querySelector("#feedbackSubmit");
+  const message = overlay.querySelector("#feedbackText").value.trim();
+  const kind = overlay.querySelector('input[name="fbKind"]:checked')?.value || "bug";
+
+  if (!message) {
+    statusEl.textContent = "Напишите сообщение";
+    statusEl.className = "fb-status fb-status-error";
+    return;
+  }
+
+  submitBtn.disabled = true;
+  statusEl.textContent = "Отправляем...";
+  statusEl.className = "fb-status";
+  try {
+    const response = await fetch("/api/feedback", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, message }),
+    });
+    if (!response.ok) throw new Error("failed");
+    statusEl.textContent = "Спасибо! Сообщение отправлено.";
+    statusEl.className = "fb-status fb-status-ok";
+    overlay.querySelector("#feedbackText").value = "";
+    setTimeout(closeFeedback, 1400);
+  } catch {
+    statusEl.textContent = "Не удалось отправить. Попробуйте позже.";
+    statusEl.className = "fb-status fb-status-error";
+    submitBtn.disabled = false;
+  }
 }
 
 function renderCmaError(message) {
