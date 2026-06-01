@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import asc, select
+from sqlalchemy import asc, func, nulls_last, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -47,62 +47,65 @@ def get_listings(
     offset: int = Query(0, ge=0),
 ) -> ListingsPage:
     settings = get_settings()
-    stmt = select(Listing).where(
+    # Фильтры собираем в список условий, чтобы переиспользовать их и для
+    # подсчёта total, и для самой страницы.
+    conditions = [
         Listing.status == "active",
         Listing.price_usd >= settings.min_listing_price_usd,
         Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
-    )
+    ]
     if district:
         districts = [d.strip() for d in district.split(",") if d.strip()]
         if len(districts) == 1:
-            stmt = stmt.where(Listing.district == districts[0])
+            conditions.append(Listing.district == districts[0])
         elif districts:
-            stmt = stmt.where(Listing.district.in_(districts))
+            conditions.append(Listing.district.in_(districts))
     if rooms:
-        stmt = stmt.where(Listing.rooms == rooms)
+        conditions.append(Listing.rooms == rooms)
     if area_min is not None:
-        stmt = stmt.where(Listing.area_m2 >= area_min)
+        conditions.append(Listing.area_m2 >= area_min)
     if area_max is not None:
-        stmt = stmt.where(Listing.area_m2 <= area_max)
+        conditions.append(Listing.area_m2 <= area_max)
     if price_min is not None:
-        stmt = stmt.where(Listing.price_usd >= price_min)
+        conditions.append(Listing.price_usd >= price_min)
     if price_max is not None:
-        stmt = stmt.where(Listing.price_usd <= price_max)
+        conditions.append(Listing.price_usd <= price_max)
     if ppm_min is not None:
-        stmt = stmt.where(Listing.price_per_m2_usd >= ppm_min)
+        conditions.append(Listing.price_per_m2_usd >= ppm_min)
     if ppm_max is not None:
-        stmt = stmt.where(Listing.price_per_m2_usd <= ppm_max)
+        conditions.append(Listing.price_per_m2_usd <= ppm_max)
     if floor_min is not None:
-        stmt = stmt.where(Listing.floor >= floor_min)
+        conditions.append(Listing.floor >= floor_min)
     if floor_max is not None:
-        stmt = stmt.where(Listing.floor <= floor_max)
+        conditions.append(Listing.floor <= floor_max)
     if source:
-        stmt = stmt.where(Listing.source == source)
-
-    # Оценка рынка читается из столбцов листинга (заполняется в upsert
-    # и в ночном rebuild'е через [market_estimate.recompute_all]).
-    all_listings = list(db.scalars(stmt).all())
-    items = [_build_item(listing) for listing in all_listings]
-
+        conditions.append(Listing.source == source)
     if discount_min is not None:
-        items = [
-            item for item in items
-            if item.market and item.market.discount_percent is not None
-            and item.market.discount_percent >= discount_min
-        ]
+        # discount_percent заполняется только вместе с market-оценкой
+        # (apply_estimate всегда пишет market_basis), поэтому отбор по самой
+        # колонке эквивалентен прежнему "item.market and discount >= min";
+        # SQL `>=` уже отсекает NULL.
+        conditions.append(Listing.discount_percent >= discount_min)
 
-    if sort == "discount":
-        items.sort(key=lambda item: item.market.discount_percent if item.market and item.market.discount_percent is not None else -999, reverse=True)
-    elif sort == "price_per_m2":
-        items.sort(key=lambda item: item.price_per_m2_usd if item.price_per_m2_usd is not None else 1e18)
+    # Сортировка и пагинация — на стороне БД (раньше тянули ВСЕ подходящие
+    # строки в Python и резали там). discount_percent/price*/seen_at —
+    # индексированы. discount_percent NULL ⇒ market нет ⇒ NULLS LAST совпадает
+    # со старым сентинелом -999.
+    if sort == "price_per_m2":
+        order_by = [nulls_last(asc(Listing.price_per_m2_usd)), Listing.id.asc()]
     elif sort == "fresh":
-        items.sort(key=lambda item: item.seen_at or "", reverse=True)
+        order_by = [nulls_last(Listing.seen_at.desc()), Listing.id.desc()]
     elif sort == "price":
-        items.sort(key=lambda item: item.price_usd if item.price_usd is not None else 1e18)
+        order_by = [nulls_last(asc(Listing.price_usd)), Listing.id.asc()]
+    else:  # discount (по умолчанию)
+        order_by = [nulls_last(Listing.discount_percent.desc()), Listing.id.asc()]
 
-    total = len(items)
-    page = items[offset : offset + limit]
-    return ListingsPage(items=page, total=total)
+    total = db.scalar(select(func.count()).select_from(Listing).where(*conditions)) or 0
+    rows = db.scalars(
+        select(Listing).where(*conditions).order_by(*order_by).limit(limit).offset(offset)
+    ).all()
+    items = [_build_item(listing) for listing in rows]
+    return ListingsPage(items=items, total=total)
 
 
 @router.get("/listings/stats")
