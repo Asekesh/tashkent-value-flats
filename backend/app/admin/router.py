@@ -14,6 +14,7 @@ from app.admin.metrics import active_plan_by_user, dashboard_metrics
 from app.auth.dependencies import require_admin
 from app.db.session import get_db
 from app.models import Feedback, User
+from app.services.feedback_notify import send_feedback_reply
 
 router = APIRouter(prefix="/admin", tags=["admin-panel"])
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -95,17 +96,62 @@ def admin_feedback(
             .limit(PAGE_SIZE)
         ).all()
     )
+    # Кому можно ответить: feedback_id -> telegram_id (или None, если нет юзера/tg).
+    user_ids = {fb.user_id for fb in rows if fb.user_id}
+    tg_by_user: dict[int, int] = {}
+    if user_ids:
+        tg_by_user = {
+            u.id: u.telegram_id
+            for u in db.scalars(select(User).where(User.id.in_(user_ids))).all()
+            if u.telegram_id
+        }
+    reply_targets = {fb.id: tg_by_user.get(fb.user_id) for fb in rows}
     return templates.TemplateResponse(
         request,
         "feedback.html",
         {
             "admin": admin,
             "rows": rows,
+            "reply_targets": reply_targets,
             "page": page,
             "pages": pages,
             "total": total,
         },
     )
+
+
+@router.post("/feedback/{fb_id}/reply")
+def reply_feedback(
+    request: Request,
+    fb_id: int,
+    reply: str = Form(...),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    text = (reply or "").strip()
+    if not (1 <= len(text) <= 2000):
+        raise HTTPException(status_code=400, detail="Invalid reply length")
+
+    fb = db.get(Feedback, fb_id)
+    if fb is None:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+
+    user = db.get(User, fb.user_id) if fb.user_id else None
+    if user is None or not user.telegram_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя ответить: анонимная отправка с сайта",
+        )
+
+    if not send_feedback_reply(user.telegram_id, text, fb.message):
+        raise HTTPException(status_code=502, detail="Не удалось отправить ответ в Telegram")
+
+    from datetime import datetime
+
+    fb.admin_reply = text
+    fb.replied_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(url="/admin/feedback", status_code=303)
 
 
 def _redirect_to_users(request: Request) -> RedirectResponse:

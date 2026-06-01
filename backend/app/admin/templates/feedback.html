@@ -3,29 +3,42 @@
 {% block content %}
 <h1>Обратная связь <span style="color:#94a3b8;font-weight:400;">· {{ total }}</span></h1>
 
-<table>
-  <thead>
-    <tr>
-      <th>Дата</th><th>Тип</th><th>Источник</th><th>Автор</th><th>Сообщение</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for fb in rows %}
-    <tr>
-      <td style="white-space:nowrap;">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at else "—" }}</td>
-      <td>
-        {% if fb.kind == "bug" %}<span class="pill pill-admin">Ошибка</span>
-        {% else %}<span class="pill pill-pro">Пожелание</span>{% endif %}
-      </td>
-      <td><span class="pill pill-{{ 'agent' if fb.source == 'bot' else 'individual' }}">{{ fb.source }}</span></td>
-      <td>{{ fb.contact or "—" }}</td>
-      <td style="white-space:pre-wrap;">{{ fb.message }}</td>
-    </tr>
+<div class="tickets">
+  {% for fb in rows %}
+  <div class="ticket">
+    <div class="ticket-head">
+      {% if fb.kind == "bug" %}<span class="pill pill-admin">Ошибка</span>
+      {% else %}<span class="pill pill-pro">Пожелание</span>{% endif %}
+      <span class="pill pill-{{ 'agent' if fb.source == 'bot' else 'individual' }}">{{ fb.source }}</span>
+      <span class="ticket-author">{{ fb.contact or "аноним" }}</span>
+      <span class="ticket-date">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at else "—" }}</span>
+      {% if fb.replied_at %}<span class="pill pill-pro" style="margin-left:auto;">✓ Отвечено</span>{% endif %}
+    </div>
+
+    <div class="ticket-message">{{ fb.message }}</div>
+
+    {% if fb.admin_reply %}
+    <div class="ticket-reply-prev">
+      <strong>Ваш ответ</strong>
+      <span class="ticket-date">{{ fb.replied_at.strftime('%Y-%m-%d %H:%M') if fb.replied_at else "" }}</span>
+      <div>{{ fb.admin_reply }}</div>
+    </div>
+    {% endif %}
+
+    {% if reply_targets.get(fb.id) %}
+    <form class="ticket-reply-form" method="post" action="/admin/feedback/{{ fb.id }}/reply">
+      <textarea name="reply" rows="2" maxlength="2000" required
+        placeholder="{{ 'Изменить ответ…' if fb.admin_reply else 'Написать ответ пользователю…' }}"></textarea>
+      <button type="submit">{{ 'Отправить снова' if fb.admin_reply else 'Отправить ответ' }}</button>
+    </form>
     {% else %}
-    <tr><td colspan="5" style="text-align:center;color:#94a3b8;">Пока нет сообщений</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+    <p class="ticket-noreply">Ответить нельзя: анонимная отправка с сайта (нет Telegram).</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <p style="text-align:center;color:#94a3b8;padding:30px;">Пока нет сообщений</p>
+  {% endfor %}
+</div>
 
 <div class="pager">
   {% if page > 1 %}<a href="/admin/feedback?page={{ page - 1 }}">← назад</a>{% endif %}

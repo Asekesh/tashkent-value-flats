@@ -71,3 +71,47 @@ def notify_admins_new_feedback(
                     logger.exception("feedback ping to %s failed", chat_id)
     except Exception:
         logger.exception("notify_admins_new_feedback failed")
+
+
+def send_feedback_reply(
+    telegram_id: int, reply_text: str, original_message: str | None = None
+) -> bool:
+    """Отправить ответ админа пользователю в Telegram. Возвращает True при успехе.
+
+    Тот же синхронный httpx прямо в Bot API. Ошибки логируем и возвращаем False,
+    чтобы вызывающий не записывал ответ как доставленный.
+    """
+    settings = get_settings()
+    token = settings.telegram_bot_token
+    if not token:
+        logger.warning("send_feedback_reply: no bot token")
+        return False
+
+    import html
+
+    quote = ""
+    if original_message:
+        snippet = html.escape(original_message[:200])
+        quote = f"\n\n<i>На ваше сообщение:</i>\n<blockquote>{snippet}</blockquote>"
+    text = (
+        "💬 <b>Ответ от поддержки uyradar.uz</b>\n\n"
+        f"{html.escape(reply_text[:3500])}{quote}"
+    )
+
+    try:
+        import httpx
+
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={
+                    "chat_id": telegram_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                },
+            )
+        return resp.status_code == 200
+    except Exception:
+        logger.exception("send_feedback_reply to %s failed", telegram_id)
+        return False

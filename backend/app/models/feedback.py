@@ -29,3 +29,6 @@ class Feedback(Base):
     source: Mapped[str] = mapped_column(String(8))  # "web" | "bot"
     contact: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Ответ админа пользователю (один на тикет, хранится последний) + когда отправлен.
+    admin_reply: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    replied_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
