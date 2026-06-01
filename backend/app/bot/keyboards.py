@@ -163,8 +163,11 @@ def discount_keyboard() -> InlineKeyboardMarkup:
 def alert_actions(alert_id: int, is_active: bool) -> InlineKeyboardMarkup:
     toggle_label = "⏸ Пауза" if is_active else "▶️ Включить"
     return InlineKeyboardMarkup(
-        inline_keyboard=[[
-            InlineKeyboardButton(text=toggle_label, callback_data=f"toggle:{alert_id}"),
-            InlineKeyboardButton(text="🗑 Удалить", callback_data=f"del:{alert_id}"),
-        ]]
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=toggle_label, callback_data=f"toggle:{alert_id}"),
+                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"del:{alert_id}"),
+            ],
+            [InlineKeyboardButton(text="✏️ Изменить фильтр", callback_data=f"edit:{alert_id}")],
+        ]
     )

@@ -124,6 +124,40 @@ async def cmd_new(msg: Message, state: FSMContext) -> None:
     await _begin_new_alert(msg, msg.from_user, state)
 
 
+@router.callback_query(F.data.startswith("edit:"))
+async def on_edit(cb: CallbackQuery, state: FSMContext) -> None:
+    alert_id = int(cb.data.split(":", 1)[1])
+    user_id = _ensure_user(cb.from_user.id, cb.from_user.username, cb.from_user.first_name)
+    with SessionLocal() as db:
+        alert = db.get(Alert, alert_id)
+        if alert is None or alert.user_id != user_id:
+            await cb.answer("Не нашёл уведомление.", show_alert=True)
+            return
+        districts = set((alert.districts or "").split(",")) - {""}
+        rooms = {int(r) for r in (alert.rooms or "").split(",") if r}
+        prefill = dict(
+            editing_id=alert_id,
+            districts=districts,
+            rooms=rooms,
+            price_min=alert.price_min,
+            price_max=alert.price_max,
+            area_min=alert.area_min,
+            area_max=alert.area_max,
+            floor_min=alert.floor_min,
+            floor_max=alert.floor_max,
+            discount_min=alert.discount_min,
+        )
+
+    await state.clear()
+    await state.set_state(NewAlert.districts)
+    await state.update_data(**prefill)
+    await cb.message.answer(
+        "✏️ Меняем фильтр. Шаг 1/6. Выберите районы (можно несколько):",
+        reply_markup=districts_keyboard(districts),
+    )
+    await cb.answer()
+
+
 # ---------- inline-кнопки стартового экрана ----------
 
 @router.callback_query(F.data == "start:new")
@@ -335,31 +369,41 @@ async def set_name(msg: Message, state: FSMContext) -> None:
 
     districts = sorted(data.get("districts") or set())
     rooms = sorted(int(r) for r in (data.get("rooms") or set()))
+    editing_id = data.get("editing_id")
+
+    fields = dict(
+        name=name,
+        districts=",".join(districts) if districts else None,
+        rooms=",".join(str(r) for r in rooms) if rooms else None,
+        price_min=data.get("price_min"),
+        price_max=data.get("price_max"),
+        area_min=data.get("area_min"),
+        area_max=data.get("area_max"),
+        floor_min=data.get("floor_min"),
+        floor_max=data.get("floor_max"),
+        discount_min=data.get("discount_min"),
+    )
 
     with SessionLocal() as db:
-        alert = Alert(
-            user_id=user_id,
-            name=name,
-            districts=",".join(districts) if districts else None,
-            rooms=",".join(str(r) for r in rooms) if rooms else None,
-            price_min=data.get("price_min"),
-            price_max=data.get("price_max"),
-            area_min=data.get("area_min"),
-            area_max=data.get("area_max"),
-            floor_min=data.get("floor_min"),
-            floor_max=data.get("floor_max"),
-            discount_min=data.get("discount_min"),
-            is_active=True,
-            created_at=datetime.utcnow(),
-        )
-        db.add(alert)
+        if editing_id is not None:
+            alert = db.get(Alert, editing_id)
+            if alert is None or alert.user_id != user_id:
+                await state.clear()
+                await msg.answer("Не нашёл уведомление для изменения.", reply_markup=main_menu())
+                return
+            for key, value in fields.items():
+                setattr(alert, key, value)
+        else:
+            alert = Alert(user_id=user_id, is_active=True, created_at=datetime.utcnow(), **fields)
+            db.add(alert)
         db.commit()
         db.refresh(alert)
         summary = describe_alert(alert)
 
     await state.clear()
+    verb = "обновлено" if editing_id is not None else "создано"
     await msg.answer(
-        f"✅ Уведомление <b>«{name}»</b> создано.\n\n{summary}\n\n"
+        f"✅ Уведомление <b>«{name}»</b> {verb}.\n\n{summary}\n\n"
         "Теперь я пришлю сообщение, как только появится подходящая квартира.",
         reply_markup=main_menu(),
     )

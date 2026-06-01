@@ -123,7 +123,7 @@ def _send_listing_sync(client, token: str, chat_id: int, listing: Listing, alert
     ppm = int(listing.price_per_m2_usd or 0)
     discount = ""
     if listing.discount_percent is not None and listing.discount_percent > 0:
-        discount = f"\n🎯 <b>{int(listing.discount_percent * 100)}% ниже рынка</b>"
+        discount = f"\n🎯 <b>{int(listing.discount_percent)}% ниже рынка</b>"
 
     text = (
         f"🆕 <b>{alert.name}</b>\n\n"
