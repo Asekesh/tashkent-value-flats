@@ -167,7 +167,9 @@ async def redirect_www_to_apex(request: Request, call_next):
     # «Bot domain invalid», поэтому канонизируем хост: www.uyradar.uz → uyradar.uz.
     host = request.headers.get("host", "")
     if host.startswith("www."):
-        url = request.url.replace(netloc=host[4:])
+        # scheme=https явно: за прокси Railway request.url.scheme может быть http,
+        # а для Telegram http/https — разные origin. Канон — https-апекс.
+        url = request.url.replace(scheme="https", netloc=host[4:])
         return RedirectResponse(str(url), status_code=301)
     return await call_next(request)
 
