@@ -5,9 +5,9 @@ from pathlib import Path
 import asyncio
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, inspect, select, func, text
 
@@ -161,6 +161,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.middleware("http")
+async def redirect_www_to_apex(request: Request, call_next):
+    # Telegram login widget привязан к одному домену (apex). На www он отдаёт
+    # «Bot domain invalid», поэтому канонизируем хост: www.uyradar.uz → uyradar.uz.
+    host = request.headers.get("host", "")
+    if host.startswith("www."):
+        url = request.url.replace(netloc=host[4:])
+        return RedirectResponse(str(url), status_code=301)
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
