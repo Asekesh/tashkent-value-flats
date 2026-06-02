@@ -1,0 +1,40 @@
+{% extends "hub_base.html" %}
+{% block content %}
+<h1>{{ h1 }}</h1>
+<p class="lead">{{ meta_description }}</p>
+
+<div class="stats">
+  <div><b>{{ data.total|num }}</b><span>объявлений</span></div>
+  <div><b>{{ data.min_price_usd|usd }}</b><span>цена от</span></div>
+  <div><b>{{ data.avg_ppm_usd|num }} $/м²</b><span>в среднем</span></div>
+</div>
+
+<div class="cards">
+  {% for c in data.cards %}
+  <article class="card">
+    {% if c.photo %}<img class="thumb" src="{{ c.photo }}" alt="{{ c.rooms }}-комн. квартира, {{ c.area_m2|num }} м², {{ c.district }}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />{% endif %}
+    <div class="card-body">
+      <div class="price">{{ c.price_usd|usd }}{% if c.discount_percent %}<span class="disc">−{{ c.discount_percent|round|int }}% к рынку</span>{% endif %}</div>
+      <div class="facts">{{ c.rooms }}-комн. · {{ c.area_m2|num }} м²{% if c.floor %} · {{ c.floor }}{% if c.total_floors %}/{{ c.total_floors }}{% endif %} эт.{% endif %} · {{ c.price_per_m2_usd|num }} $/м²</div>
+      <div class="addr">{{ c.district }}{% if c.address %} · {{ c.address }}{% endif %}</div>
+      <a class="src" href="{{ c.url }}" target="_blank" rel="nofollow noopener">Смотреть на {{ c.source_label }} →</a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{% if data.total > data.cards|length %}
+<p class="more">Показаны {{ data.cards|length }} лучших предложений из {{ data.total|num }}. <a href="/">Все объявления и фильтры — в поиске →</a></p>
+{% endif %}
+
+{% if related %}
+<section class="related">
+  {% for sec in related %}
+  <div class="related-block">
+    <h2>{{ sec.title }}</h2>
+    <div class="chips">{% for l in sec.links %}<a href="{{ l.url }}">{{ l.label }}</a>{% endfor %}</div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

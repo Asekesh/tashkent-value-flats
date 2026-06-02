@@ -17,6 +17,7 @@ from app.auth.router import router as auth_router
 from app.bot import notifier_loop, start_bot_polling, stop_bot
 from app.core.config import get_settings
 from app.legal.router import router as legal_router
+from app.seo.router import router as seo_router
 from app.db.session import Base, SessionLocal, engine
 from app.models import Listing  # noqa: F401
 from app.scrapers.registry import ADAPTERS, parse_fixture
@@ -187,11 +188,6 @@ def robots() -> FileResponse:
     return FileResponse(STATIC_DIR / "robots.txt", media_type="text/plain")
 
 
-@app.get("/sitemap.xml", include_in_schema=False)
-def sitemap() -> FileResponse:
-    return FileResponse(STATIC_DIR / "sitemap.xml", media_type="application/xml")
-
-
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -204,3 +200,4 @@ app.include_router(feedback.router)
 app.include_router(auth_router)
 app.include_router(admin_panel_router)
 app.include_router(legal_router)
+app.include_router(seo_router)

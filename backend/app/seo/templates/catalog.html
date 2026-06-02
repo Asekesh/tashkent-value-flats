@@ -1,0 +1,18 @@
+{% extends "hub_base.html" %}
+{% block content %}
+<h1>Квартиры в Ташкенте по районам</h1>
+<p class="lead">{{ meta_description }}</p>
+
+<section class="related">
+  <div class="related-block">
+    <h2>По районам</h2>
+    <div class="chips">{% for l in district_links %}<a href="{{ l.url }}">{{ l.label }}</a>{% endfor %}</div>
+  </div>
+  {% if room_links %}
+  <div class="related-block">
+    <h2>По комнатности</h2>
+    <div class="chips">{% for l in room_links %}<a href="{{ l.url }}">{{ l.label }}</a>{% endfor %}</div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
