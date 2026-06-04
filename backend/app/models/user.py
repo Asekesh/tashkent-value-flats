@@ -31,3 +31,7 @@ class User(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Любая активность (вкл. бот) — сенсор для ретеншна/DAU/WAU/отвала.
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    # Канал привлечения (first-touch): start-param бота или utm. NULL = legacy/unknown.
+    source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

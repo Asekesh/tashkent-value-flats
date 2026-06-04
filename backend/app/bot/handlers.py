@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Optional
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ErrorEvent, Message
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.bot.keyboards import (
     AREA_VALUES,
@@ -32,8 +33,10 @@ from app.bot.keyboards import (
 )
 from app.bot.matcher import describe_alert
 from app.bot.states import Feedback, NewAlert
+from app.auth.dependencies import resolve_user_plan
+from app.core.plans import get_limits_for_plan
 from app.db.session import SessionLocal
-from app.models import Alert, Feedback as FeedbackModel, User
+from app.models import Alert, Feedback as FeedbackModel, LimitEvent, User
 from app.services.feedback_notify import notify_admins_new_feedback
 from app.services.normalization import CANONICAL_DISTRICTS
 
@@ -80,22 +83,56 @@ WELCOME = (
 )
 
 
-def _ensure_user(tg_id: int, username: Optional[str], first_name: Optional[str]) -> int:
+_SOURCE_RE = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def _clean_source(raw: Optional[str]) -> Optional[str]:
+    """Deep-link payload → безопасный токен источника (Telegram допускает
+    [A-Za-z0-9_-], ≤64). Пустое/мусор → None."""
+    if not raw:
+        return None
+    cleaned = _SOURCE_RE.sub("", raw)[:64]
+    return cleaned or None
+
+
+def _ensure_user(
+    tg_id: int,
+    username: Optional[str],
+    first_name: Optional[str],
+    source: Optional[str] = None,
+) -> int:
+    now = datetime.utcnow()
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.telegram_id == tg_id))
         if user is None:
-            user = User(telegram_id=tg_id, username=username, first_name=first_name)
+            user = User(
+                telegram_id=tg_id,
+                username=username,
+                first_name=first_name,
+                source=source,
+                last_seen_at=now,
+            )
             db.add(user)
-            db.commit()
-            db.refresh(user)
+        else:
+            # Сенсор активности: пишем на каждое касание (DAU/WAU/отвал).
+            user.last_seen_at = now
+            # first-touch: источник проставляем только если ещё пуст.
+            if source and not user.source:
+                user.source = source
+        db.commit()
+        db.refresh(user)
         return user.id
 
 
 # ---------- /start, /help, menu buttons ----------
 
 @router.message(CommandStart())
-async def cmd_start(msg: Message) -> None:
-    _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
+async def cmd_start(msg: Message, command: CommandObject) -> None:
+    # Deep-link t.me/uyradaruz_bot?start=<источник> — ловим payload (атрибуция).
+    source = _clean_source(command.args)
+    _ensure_user(
+        msg.from_user.id, msg.from_user.username, msg.from_user.first_name, source=source
+    )
     # сначала ставим reply-клавиатуру, затем — крупные inline-кнопки для новичков
     await msg.answer(WELCOME, reply_markup=main_menu())
     await msg.answer("Что хотите сделать?", reply_markup=start_inline())
@@ -461,6 +498,23 @@ async def set_name(msg: Message, state: FSMContext) -> None:
             for key, value in fields.items():
                 setattr(alert, key, value)
         else:
+            # Лид-сигнал на платник: фиксируем (не блокируем), когда free-юзер
+            # создаёт алёрт сверх лимита тарифа.
+            existing = (
+                db.scalar(select(func.count(Alert.id)).where(Alert.user_id == user_id))
+                or 0
+            )
+            plan = resolve_user_plan(db, db.get(User, user_id))
+            cap = get_limits_for_plan(plan).get("max_saved_filters")
+            if cap is not None and existing >= cap:
+                db.add(
+                    LimitEvent(
+                        user_id=user_id,
+                        event_type="alert_cap",
+                        plan=plan,
+                        detail=f"{existing + 1}-й алёрт при лимите {cap}",
+                    )
+                )
             alert = Alert(user_id=user_id, is_active=True, created_at=datetime.utcnow(), **fields)
             db.add(alert)
         db.commit()

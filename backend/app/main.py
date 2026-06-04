@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, inspect, select, func, text
 
 from app.admin.router import router as admin_panel_router
-from app.api import admin, feedback, listings, onboarding
+from app.api import admin, feedback, listings, onboarding, redirect
 from app.auth.router import router as auth_router
 from app.bot import notifier_loop, start_bot_polling, stop_bot
 from app.core.config import get_settings
@@ -91,12 +91,32 @@ def _ensure_market_columns() -> None:
             conn.execute(text(f"ALTER TABLE listings ADD COLUMN {name} {ddl}"))
 
 
+def _ensure_user_columns() -> None:
+    """Safety net: добавить users.last_seen_at / users.source, если миграция
+    0010 не прогналась (dev / старые env). create_all не делает ALTER, в проде
+    колонки добавляет Alembic — здесь подстраховка как в _ensure_market_columns."""
+    inspector = inspect(engine)
+    if not inspector.has_table("users"):
+        return
+    existing = {col["name"] for col in inspector.get_columns("users")}
+    additions = (
+        ("last_seen_at", "DATETIME"),
+        ("source", "VARCHAR(64)"),
+    )
+    with engine.begin() as conn:
+        for name, ddl in additions:
+            if name in existing:
+                continue
+            conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {ddl}"))
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     _configure_bot_logging()
     Base.metadata.create_all(bind=engine)
     _ensure_trigger_columns()
     _ensure_market_columns()
+    _ensure_user_columns()
     # Base.metadata.create_all уже создаст alerts на пустых БД; в проде
     # Alembic тоже накатит. Доп. safety net не нужен.
     scheduler_task: asyncio.Task | None = None
@@ -201,3 +221,4 @@ app.include_router(auth_router)
 app.include_router(admin_panel_router)
 app.include_router(legal_router)
 app.include_router(seo_router)
+app.include_router(redirect.router)

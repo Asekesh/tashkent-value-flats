@@ -23,6 +23,75 @@
 </div>
 
 <div class="section">
+  <h2>CTR алёртов — кликают ли по уведомлениям</h2>
+  <div class="cards">
+    <div class="card"><div class="label">Отправлено (7д)</div><div class="value">{{ metrics.ctr.sends_7d }}</div></div>
+    <div class="card"><div class="label">Кликнули (7д)</div><div class="value">{{ metrics.ctr.clicks_7d }}</div></div>
+    <div class="card"><div class="label">CTR (7д)</div><div class="value">{{ metrics.ctr.ctr_7d }}%</div></div>
+  </div>
+  <table style="margin-top:14px;">
+    <thead>
+      <tr><th>Скидка к рынку</th><th>Отправлено (30д)</th><th>Кликов</th><th>CTR</th></tr>
+    </thead>
+    <tbody>
+      {% for b in metrics.ctr.by_discount %}
+      <tr><td>{{ b.label }}</td><td>{{ b.sends }}</td><td>{{ b.clicks }}</td><td>{{ b.ctr }}%</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="chart-legend">Ссылка-кнопка идёт через /r/{токен} — Telegram не префетчит кнопки, клики живые.</div>
+</div>
+
+<div class="section">
+  <h2>Источники привлечения</h2>
+  {% if metrics.source_attribution %}
+  <table>
+    <thead>
+      <tr><th>Источник</th><th>Зарегано</th><th>Активных (есть алёрт)</th><th>Конверсия</th></tr>
+    </thead>
+    <tbody>
+      {% for s in metrics.source_attribution %}
+      <tr>
+        <td>{{ s.source }}</td>
+        <td>{{ s.registered }}</td>
+        <td>{{ s.activated }}</td>
+        <td>{{ s.conversion }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#94a3b8;font-size:13px;">Пока нет данных по меткам. Раздавайте ссылки вида <code>t.me/uyradaruz_bot?start=метка</code>.</p>
+  {% endif %}
+</div>
+
+<div class="section">
+  <h2>Парсеры — здоровье источников</h2>
+  <div class="cards">
+    {% for p in metrics.parser_health %}
+    <div class="card">
+      <div class="label">
+        {% if p.health == 'ok' %}🟢{% elif p.health == 'empty' %}🟡{% elif p.health == 'stale' %}🟠{% elif p.health == 'error' %}🔴{% else %}⚫️{% endif %}
+        {{ p.source }}
+      </div>
+      <div class="value">{{ p.new_today }}</div>
+      <div class="sub">
+        новых сегодня · посл. успех {% if p.last_success_age_h is not none %}{{ p.last_success_age_h }} ч назад{% else %}—{% endif %}<br>
+        последний запуск: {{ p.last_status or '—' }} · нашёл {{ p.last_found }}
+        {% if p.health == 'empty' %}<br>⚠️ парсит, но извлёк 0 — возможно сломан селектор{% endif %}
+        {% if p.health == 'stale' %}<br>⚠️ давно не было успешного прогона{% endif %}
+        {% if p.health == 'error' %}<br>⚠️ последний запуск упал{% endif %}
+        {% if p.health == 'down' %}<br>⚠️ успешных прогонов нет{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% if not metrics.parser_health %}
+    <div class="card"><div class="label">Нет данных о запусках</div><div class="value">—</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="section">
   <h2>По типу аккаунта</h2>
   <div class="cards">
     <div class="card"><div class="label">Физлица</div><div class="value">{{ metrics.account_types.individual }}</div></div>
