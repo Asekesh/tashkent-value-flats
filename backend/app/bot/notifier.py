@@ -145,17 +145,18 @@ def _send_listing_sync(
     if listing.discount_percent is not None and listing.discount_percent > 0:
         discount = f"\n🎯 <b>{int(listing.discount_percent)}% ниже рынка</b>"
 
-    # Ссылку кладём в inline-кнопку через /r/{token}: Telegram НЕ префетчит
-    # кнопки (в отличие от ссылок в тексте), поэтому клик = живой человек.
+    # Ссылку-трекер /r/{token} кладём прямо в текст (а не в inline-кнопку):
+    # кнопка заставляла Telegram показывать экран-подтверждение перехода.
+    # Накрутку от ботов-префетчеров отсекаем по User-Agent в обработчике /r/.
+    click_url = f"{PUBLIC_BASE_URL}/r/{sign_send(send_id)}"
     text = (
         f"🆕 <b>{alert.name}</b>\n\n"
         f"<b>{title}</b>\n\n"
         f"💰 {price} · 📐 {ppm}$/м² · 📏 {int(listing.area_m2 or 0)} м² · 🛏 {listing.rooms}к\n"
         f"📍 {short_district}"
-        f"{discount}"
+        f"{discount}\n\n"
+        f'🔎 <a href="{click_url}">Смотреть объявление →</a>'
     )
-    click_url = f"{PUBLIC_BASE_URL}/r/{sign_send(send_id)}"
-    reply_markup = {"inline_keyboard": [[{"text": "🔎 Смотреть объявление →", "url": click_url}]]}
 
     try:
         resp = client.post(
@@ -165,7 +166,6 @@ def _send_listing_sync(
                 "text": text,
                 "parse_mode": "HTML",
                 "disable_web_page_preview": True,
-                "reply_markup": reply_markup,
             },
         )
         if resp.status_code == 403:
