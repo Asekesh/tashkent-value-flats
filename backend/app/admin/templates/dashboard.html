@@ -50,6 +50,94 @@
 </div>
 
 <div class="section">
+  <h2>Сайт — посещаемость</h2>
+  {% set site = metrics.site %}
+  {% if not site.configured %}
+  <p style="color:#94a3b8;font-size:13px;">
+    Яндекс.Метрика не подключена к дашборду. Счётчик на сайте стоит, но для
+    чтения статистики нужен OAuth-токен Reporting API в переменной
+    <code>YANDEX_METRIKA_OAUTH_TOKEN</code>.
+  </p>
+  {% elif site.error %}
+  <p style="color:#f87171;font-size:13px;">Метрика недоступна (ошибка API или токена). Цифры ниже — только свои, из БД.</p>
+  {% else %}
+  <div class="cards">
+    <div class="card"><div class="label">Посетителей сегодня</div><div class="value">{{ site.today.users }}</div><div class="sub">визитов: {{ site.today.visits }}</div></div>
+    <div class="card"><div class="label">Посетителей за 7 дней</div><div class="value">{{ site.week.users }}</div><div class="sub">визитов: {{ site.week.visits }}</div></div>
+    <div class="card"><div class="label">Посетителей за 30 дней</div><div class="value">{{ site.month.users }}</div><div class="sub">визитов: {{ site.month.visits }}</div></div>
+    <div class="card"><div class="label">Просмотров (30д)</div><div class="value">{{ site.month.pageviews }}</div><div class="sub">глубина: {{ site.month.page_depth }} стр.</div></div>
+    <div class="card"><div class="label">Отказы (30д)</div><div class="value">{{ site.month.bounce_rate }}%</div></div>
+  </div>
+  {% if site.sources %}
+  <table style="margin-top:14px;">
+    <thead><tr><th>Источник трафика (30д)</th><th>Визитов</th></tr></thead>
+    <tbody>
+      {% for s in site.sources %}
+      <tr><td>{{ s.source }}</td><td>{{ s.visits }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <div class="chart-legend">Данные Яндекс.Метрики (счётчик {{ site.counter_id }}), все посетители вкл. анонимных. Кэш ~10 мин.</div>
+  {% endif %}
+
+  {% set act = metrics.activity %}
+  <div class="cards" style="margin-top:14px;">
+    <div class="card"><div class="label">Авторизованных на сайте (7д)</div><div class="value">{{ act.web_users_7d }}</div></div>
+    <div class="card"><div class="label">Авторизованных на сайте (30д)</div><div class="value">{{ act.web_users_30d }}</div></div>
+    <div class="card"><div class="label">Входов за 7 дней</div><div class="value">{{ metrics.logins_7d }}</div></div>
+  </div>
+  <h3 style="margin:16px 0 6px;font-size:14px;color:#cbd5e1;">Входы по дням (30 дней)</h3>
+  <div class="chart">
+    {% for row in act.logins_by_day %}
+      {% set h = (row.count / act.logins_max * 100) if act.logins_max else 0 %}
+      <div class="bar-wrap" title="{{ row.day }}: {{ row.count }}"><div class="bar" style="height: {{ h }}%;"></div></div>
+    {% endfor %}
+  </div>
+  <div class="chart-legend">Свои данные из login_events (авторизованные через Telegram-логин) — независимо от Метрики.</div>
+</div>
+
+<div class="section">
+  <h2>Удержание — DAU / WAU / MAU и ретеншн</h2>
+  {% set act = metrics.activity %}
+  <div class="cards">
+    <div class="card"><div class="label">DAU (активных сегодня)</div><div class="value">{{ act.dau }}</div></div>
+    <div class="card"><div class="label">WAU (за 7 дней)</div><div class="value">{{ act.wau }}</div></div>
+    <div class="card"><div class="label">MAU (за 30 дней)</div><div class="value">{{ act.mau }}</div></div>
+    <div class="card"><div class="label">Липкость DAU/MAU</div><div class="value">{{ ((act.dau / act.mau * 100) | round) if act.mau else 0 }}%</div></div>
+  </div>
+  <h3 style="margin:16px 0 6px;font-size:14px;color:#cbd5e1;">Когорты по неделям регистрации</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Когорта (нед.)</th><th>Размер</th>
+        {% for off in range(metrics.retention.max_offset + 1) %}<th>W{{ off }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in metrics.retention.cohorts %}
+      <tr>
+        <td>{{ c.week }}</td><td>{{ c.size }}</td>
+        {% for off in range(metrics.retention.max_offset + 1) %}
+          {% if off < c.cells | length %}
+            {% set cell = c.cells[off] %}
+            <td style="text-align:center;background:rgba(34,197,94,{{ cell.pct / 100 }});" title="{{ cell.active }} из {{ c.size }}">{{ cell.pct }}%</td>
+          {% else %}
+            <td style="text-align:center;color:#475569;">·</td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="chart-legend">
+    Активность = касание бота или веб-логин в ту неделю. W0 — неделя регистрации.
+    ⚠️ Таблица наполняется с момента внедрения (user_activity не имеет ретроспективы) —
+    первые недели будут разрежены, это нормально.
+  </div>
+</div>
+
+<div class="section">
   <h2>CTR алёртов — кликают ли по уведомлениям</h2>
   <div class="cards">
     <div class="card"><div class="label">Отправлено (7д)</div><div class="value">{{ metrics.ctr.sends_7d }}</div></div>

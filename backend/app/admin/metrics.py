@@ -1,6 +1,7 @@
 """Read-only aggregate queries for the admin dashboard."""
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -10,7 +11,16 @@ from sqlalchemy.orm import Session
 from app.core import runtime_metrics
 from app.core.config import get_settings
 from app.db.session import engine
-from app.models import Alert, AlertSend, LoginEvent, ScrapeRun, Subscription, User
+from app.models import (
+    Alert,
+    AlertSend,
+    LoginEvent,
+    ScrapeRun,
+    Subscription,
+    User,
+    UserActivity,
+)
+from app.services.metrika import site_metrics
 
 
 def _active_subscription_filter():
@@ -210,6 +220,122 @@ def server_health() -> dict[str, Any]:
     return {**rt, "pool": pool, "pool_used_pct": pool_used_pct}
 
 
+def activity_stats(db: Session) -> dict[str, Any]:
+    """Единый DAU/WAU/MAU (бот + веб) из user_activity + веб-срез из LoginEvent.
+
+    user_activity копит факт активности по дням с момента внедрения — поэтому
+    окна короткие и честные. Веб-часть (уникальные авторизованные, логины по
+    дням) берётся из login_events: это «своя» правда про сайт независимо от
+    Метрики. logins по дням gap-filled под бар-чарт, как регистрации.
+    """
+    now = datetime.utcnow()
+    today = now.date()
+
+    def _active_since(start_day) -> int:
+        return (
+            db.scalar(
+                select(func.count(func.distinct(UserActivity.user_id))).where(
+                    UserActivity.day >= start_day
+                )
+            )
+            or 0
+        )
+
+    dau = _active_since(today)
+    wau = _active_since(today - timedelta(days=6))
+    mau = _active_since(today - timedelta(days=29))
+
+    web_users_7d = (
+        db.scalar(
+            select(func.count(func.distinct(LoginEvent.user_id))).where(
+                LoginEvent.created_at >= now - timedelta(days=7)
+            )
+        )
+        or 0
+    )
+    web_users_30d = (
+        db.scalar(
+            select(func.count(func.distinct(LoginEvent.user_id))).where(
+                LoginEvent.created_at >= now - timedelta(days=30)
+            )
+        )
+        or 0
+    )
+
+    # Логины по дням, 30 дней, gap-filled.
+    raw: dict[str, int] = {}
+    for day, count in db.execute(
+        select(func.date(LoginEvent.created_at), func.count(LoginEvent.id))
+        .where(LoginEvent.created_at >= now - timedelta(days=30))
+        .group_by(func.date(LoginEvent.created_at))
+    ).all():
+        raw[str(day)] = count
+    day_start = datetime(now.year, now.month, now.day)
+    logins_by_day = []
+    for offset in range(29, -1, -1):
+        d = (day_start - timedelta(days=offset)).date()
+        logins_by_day.append({"day": d.isoformat(), "count": raw.get(d.isoformat(), 0)})
+    logins_max = max((r["count"] for r in logins_by_day), default=0)
+
+    return {
+        "dau": dau,
+        "wau": wau,
+        "mau": mau,
+        "web_users_7d": web_users_7d,
+        "web_users_30d": web_users_30d,
+        "logins_by_day": logins_by_day,
+        "logins_max": logins_max,
+    }
+
+
+def retention_cohorts(db: Session, weeks: int = 8) -> dict[str, Any]:
+    """Недельный ретеншн-треугольник: когорта регистрации × смещение недели.
+
+    cell = % когорты, проявившей активность (user_activity) на неделе W+offset.
+    Считаем в Python — объём (юзеры за N недель) мал. ВАЖНО: user_activity
+    наполняется с момента внедрения, ретроспективы нет — старые когорты будут
+    пустыми по W0+, это ожидаемо и подписано в легенде.
+    """
+    today = datetime.utcnow().date()
+    this_week = today - timedelta(days=today.weekday())  # понедельник тек. недели
+    first_week = this_week - timedelta(weeks=weeks - 1)
+    since = datetime(first_week.year, first_week.month, first_week.day)
+
+    cohort_users: dict[Any, set[int]] = defaultdict(set)
+    for uid, created in db.execute(
+        select(User.id, User.created_at).where(User.created_at >= since)
+    ).all():
+        cd = created.date()
+        cohort_users[cd - timedelta(days=cd.weekday())].add(uid)
+
+    user_ids = [uid for users in cohort_users.values() for uid in users]
+    activity: dict[int, set[Any]] = defaultdict(set)
+    if user_ids:
+        for uid, day in db.execute(
+            select(UserActivity.user_id, UserActivity.day).where(
+                UserActivity.user_id.in_(user_ids)
+            )
+        ).all():
+            activity[uid].add(day - timedelta(days=day.weekday()))
+
+    cohorts = []
+    for i in range(weeks):
+        cw = first_week + timedelta(weeks=i)
+        users = cohort_users.get(cw, set())
+        size = len(users)
+        observable = (this_week - cw).days // 7  # сколько недель уже можно видеть
+        cells = []
+        for off in range(observable + 1):
+            wk = cw + timedelta(weeks=off)
+            active = sum(1 for u in users if wk in activity.get(u, ()))
+            cells.append(
+                {"pct": round(active / size * 100) if size else 0, "active": active}
+            )
+        cohorts.append({"week": cw.isoformat(), "size": size, "cells": cells})
+
+    return {"max_offset": weeks - 1, "cohorts": cohorts}
+
+
 def dashboard_metrics(db: Session) -> dict[str, Any]:
     now = datetime.utcnow()
     day_start = datetime(now.year, now.month, now.day)
@@ -314,6 +440,9 @@ def dashboard_metrics(db: Session) -> dict[str, Any]:
         "source_attribution": source_attribution(db),
         "ctr": ctr_stats(db),
         "server": server_health(),
+        "activity": activity_stats(db),
+        "retention": retention_cohorts(db),
+        "site": site_metrics(),
     }
 
 

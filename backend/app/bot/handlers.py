@@ -37,6 +37,7 @@ from app.auth.dependencies import resolve_user_plan
 from app.core.plans import get_limits_for_plan
 from app.db.session import SessionLocal
 from app.models import Alert, Feedback as FeedbackModel, LimitEvent, User
+from app.services.activity import mark_active
 from app.services.feedback_notify import notify_admins_new_feedback
 from app.services.normalization import CANONICAL_DISTRICTS
 
@@ -119,6 +120,8 @@ def _ensure_user(
             # first-touch: источник проставляем только если ещё пуст.
             if source and not user.source:
                 user.source = source
+        db.flush()  # нужен user.id для отметки активности
+        mark_active(db, user.id, now)
         db.commit()
         db.refresh(user)
         return user.id

@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     # Contact for listing-removal requests; shown on /removal when set.
     legal_contact_email: str = ""
 
+    # --- Яндекс.Метрика (посещаемость сайта в /admin) ---
+    # Счётчик уже стоит в index.html; для чтения статистики в дашборд нужен
+    # OAuth-токен Reporting API. Пусто → блок «Сайт» покажет «не настроено».
+    yandex_metrika_counter_id: str = "109543384"
+    yandex_metrika_oauth_token: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
