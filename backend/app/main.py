@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import asyncio
 import logging
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +17,7 @@ from app.api import admin, feedback, listings, onboarding, redirect
 from app.auth.router import router as auth_router
 from app.bot import notifier_loop, start_bot_polling, stop_bot
 from app.core.config import get_settings
+from app.core import runtime_metrics
 from app.legal.router import router as legal_router
 from app.seo.router import router as seo_router
 from app.db.session import Base, SessionLocal, engine
@@ -182,6 +184,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.middleware("http")
+async def measure_request(request: Request, call_next):
+    # Замер латенси и in-flight по каждому запросу — питает блок «Сервер» в
+    # /admin. finally гарантирует учёт даже при исключении в обработчике.
+    start = time.perf_counter()
+    runtime_metrics.inc()
+    try:
+        return await call_next(request)
+    finally:
+        runtime_metrics.dec()
+        runtime_metrics.record((time.perf_counter() - start) * 1000)
+
+
 @app.middleware("http")
 async def redirect_www_to_apex(request: Request, call_next):
     # Telegram login widget привязан к одному домену (apex). На www он отдаёт

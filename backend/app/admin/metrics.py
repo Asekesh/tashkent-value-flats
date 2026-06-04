@@ -7,7 +7,9 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core import runtime_metrics
 from app.core.config import get_settings
+from app.db.session import engine
 from app.models import Alert, AlertSend, LoginEvent, ScrapeRun, Subscription, User
 
 
@@ -191,6 +193,23 @@ def source_attribution(db: Session) -> list[dict[str, Any]]:
     return rows
 
 
+def server_health() -> dict[str, Any]:
+    """Здоровье процесса: латенси, RPM, in-flight и загрузка пула БД.
+
+    Пул — реальный потолок параллелизма: если checked_out упирается в capacity,
+    запросы встают в очередь (до pool_timeout). Не ходит в БД — читает счётчики
+    из памяти, поэтому дёшево вызывать на каждый рендер дашборда.
+    """
+    rt = runtime_metrics.snapshot()
+    pool = runtime_metrics.pool_stats(engine)
+    pool_used_pct = (
+        round(pool["checked_out"] / pool["capacity"] * 100)
+        if pool.get("capacity")
+        else 0
+    )
+    return {**rt, "pool": pool, "pool_used_pct": pool_used_pct}
+
+
 def dashboard_metrics(db: Session) -> dict[str, Any]:
     now = datetime.utcnow()
     day_start = datetime(now.year, now.month, now.day)
@@ -294,6 +313,7 @@ def dashboard_metrics(db: Session) -> dict[str, Any]:
         "parser_health": parser_health(db),
         "source_attribution": source_attribution(db),
         "ctr": ctr_stats(db),
+        "server": server_health(),
     }
 
 
