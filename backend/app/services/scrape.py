@@ -16,6 +16,7 @@ from app.scrapers.registry import ADAPTERS, get_adapter, parse_fixture
 from app.services import archive_sweep, scrape_progress
 from app.services.listings import mark_delisted_for_source, upsert_raw_listing
 from app.services.normalization import price_per_m2, to_usd
+from app.services.seller_classifier import classify_sellers_by_volume
 
 
 _DETAIL_HEADERS = {
@@ -124,7 +125,9 @@ def run_scrape(db: Session, source: str = "all", mode: str = "auto", trigger: st
     use_live = mode == "live" or (mode == "auto" and settings.allow_live_scraping)
     use_live = use_live or mode in {"quick", "full"}
     sources = resolve_live_sources(source) if use_live else resolve_sources(source)
-    return [run_scrape_for_source(db, source_name, mode=mode, trigger=trigger) for source_name in sources]
+    runs = [run_scrape_for_source(db, source_name, mode=mode, trigger=trigger) for source_name in sources]
+    classify_sellers_by_volume(db)  # пометить agent/owner по объёму после налива
+    return runs
 
 
 def start_scrape_in_background(source: str = "all", mode: str = "quick", trigger: str = "manual") -> bool:
@@ -160,6 +163,7 @@ def start_scrape_in_background(source: str = "all", mode: str = "quick", trigger
                         break
                     _sync_task_progress(db, task_id, current_source=source_name)
                     run_scrape_for_source(db, source_name, mode=mode, trigger=trigger)
+                classify_sellers_by_volume(db)
                 final_status = "stopped" if scrape_progress.is_stop_requested() else "success"
                 _sync_task_progress(db, task_id, status=final_status, finished=True)
             scrape_progress.finish()

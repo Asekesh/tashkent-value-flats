@@ -162,10 +162,11 @@ class UyborAdapter(SourceAdapter):
             address_raw=address,
             description=description or title,
             photos=photos,
-            seller_type=None,
+            seller_type=None,  # seller_type определяет классификатор по объёму (seller_id), не адаптер
             published_at=parse_iso_datetime(item.get("upAt") or item.get("createdAt")),
             deal_type=self.deal_type,
             price_period=price_period,
+            seller_id=compact_text(str(item.get("userId") or "")) or None,
         )
 
 

@@ -25,6 +25,7 @@ class RawListing:
     published_at: datetime | None = None
     deal_type: str = "sale"          # "sale" | "rent"
     price_period: str | None = None  # "month" | "day"; только для аренды
+    seller_id: str | None = None     # id продавца у площадки (Uybor userId) — для детекции агентов
 
 
 @dataclass

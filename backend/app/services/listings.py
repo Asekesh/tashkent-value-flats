@@ -187,7 +187,11 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         listing.building_key = building_key
         listing.description = raw.description
         listing.photos = dumps_json(raw.photos)
-        listing.seller_type = raw.seller_type
+        # seller_type у части источников (uybor) проставляет классификатор по объёму
+        # (см. classify_sellers_by_volume) — не затираем его None'ом из адаптера.
+        if raw.seller_type is not None:
+            listing.seller_type = raw.seller_type
+        listing.seller_id = raw.seller_id
         listing.deal_type = raw.deal_type
         listing.price_period = raw.price_period
         listing.published_at = raw.published_at

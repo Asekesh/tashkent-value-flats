@@ -10,6 +10,7 @@ from app.models import Listing, ScrapeTask
 from app.services import archive_sweep, scrape_progress
 from app.services.market_estimate import recompute_all as recompute_market_estimates
 from app.services.scrape import expand_with_rent, resolve_live_sources, run_scrape_for_source
+from app.services.seller_classifier import classify_sellers_by_volume
 from sqlalchemy import func, select
 
 
@@ -87,6 +88,7 @@ def _run_once() -> None:
             else:
                 if scrape_progress.is_stop_requested():
                     final_status = "stopped"
+            classify_sellers_by_volume(db)  # agent/owner по объёму после цикла
         except Exception as exc:  # pragma: no cover - defensive
             final_status = "failed"
             error = str(exc)

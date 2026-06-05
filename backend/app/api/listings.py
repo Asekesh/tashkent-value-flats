@@ -43,6 +43,7 @@ def get_listings(
     discount_min: Optional[float] = None,
     source: Optional[str] = None,
     deal_type: Literal["sale", "rent"] = "sale",
+    seller_type: Optional[Literal["owner", "agent", "unknown"]] = None,  # «без агентов» = owner
     sort: Literal["discount", "price_per_m2", "fresh", "price"] = "discount",
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -83,6 +84,8 @@ def get_listings(
         conditions.append(Listing.floor <= floor_max)
     if source:
         conditions.append(Listing.source == source)
+    if seller_type:
+        conditions.append(Listing.seller_type == seller_type)
     if discount_min is not None:
         # discount_percent заполняется только вместе с market-оценкой
         # (apply_estimate всегда пишет market_basis), поэтому отбор по самой
