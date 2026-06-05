@@ -9,7 +9,7 @@ from app.db.session import SessionLocal
 from app.models import Listing, ScrapeTask
 from app.services import archive_sweep, scrape_progress
 from app.services.market_estimate import recompute_all as recompute_market_estimates
-from app.services.scrape import resolve_live_sources, run_scrape_for_source
+from app.services.scrape import expand_with_rent, resolve_live_sources, run_scrape_for_source
 from sqlalchemy import func, select
 
 
@@ -51,7 +51,9 @@ def _run_once() -> None:
     settings = get_settings()
     if not settings.allow_live_scraping:
         return
-    sources = resolve_live_sources(",".join(settings.scheduled_source_list))
+    # Каждая запланированная площадка тянет за собой свой rent-джоб (аренда не
+    # перечислена в scheduled_scrape_sources, но должна скрейпиться вместе с sale).
+    sources = expand_with_rent(resolve_live_sources(",".join(settings.scheduled_source_list)))
     if not sources:
         return
     mode = _due_scan_mode(settings)

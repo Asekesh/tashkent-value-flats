@@ -45,6 +45,21 @@ def resolve_live_sources(source: str) -> list[str]:
     return [source_name for source_name in sources if get_adapter(source_name).supports_live]
 
 
+def expand_with_rent(sources: list[str]) -> list[str]:
+    """Для каждой запланированной площадки добавляем её rent-джоб, если он есть
+    в реестре (uybor->uybor_rent, olx->olx_rent). Так планировщик скрейпит аренду
+    вместе с продажей независимо от того, перечислены ли rent-ключи в конфиге
+    `scheduled_scrape_sources` (там исторически только площадки продажи)."""
+    out: list[str] = []
+    for source_name in sources:
+        if source_name not in out:
+            out.append(source_name)
+        rent_key = f"{source_name}_rent"
+        if rent_key in ADAPTERS and rent_key not in out:
+            out.append(rent_key)
+    return out
+
+
 def run_scrape_for_source(db: Session, source: str, mode: str = "auto", trigger: str = "manual") -> ScrapeRun:
     settings = get_settings()
     scrape_progress.set_current_source(source)

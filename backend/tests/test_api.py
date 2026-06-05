@@ -2,6 +2,18 @@ from app.services.market_estimate import recompute_all as recompute_market
 from app.services.scrape import run_scrape
 
 
+def test_scheduler_expands_rent_jobs():
+    # Планировщик берёт площадки из конфига (olx,uybor,realt24) — rent там нет.
+    # expand_with_rent обязан дотянуть rent-джоб каждой площадки, иначе аренда
+    # в проде не скрейпится вообще.
+    from app.services.scrape import expand_with_rent
+
+    out = expand_with_rent(["olx", "uybor", "realt24"])
+    assert "olx_rent" in out and "uybor_rent" in out
+    assert "realt24_rent" not in out  # у realt24 rent-адаптера нет
+    assert out.index("olx") < out.index("olx_rent")  # sale раньше rent (гейт archive_sweep)
+
+
 def test_scrape_run_and_listing_filters(client, db_session):
     runs = run_scrape(db_session, source="all")
     # «all» теперь включает rent-джобы (olx_rent/uybor_rent) — отдельные scrape-раны
