@@ -119,12 +119,13 @@ def build_cma(db: Session, listing: Listing) -> CmaResult:
         if listing.price_period is None
         else Listing.price_period == listing.price_period
     )
+    min_price_usd, min_ppm = settings.price_floors(listing.deal_type)
     base_filters = (
         Listing.status == "active",
         Listing.deal_type == listing.deal_type,
         period_filter,
-        Listing.price_usd >= settings.min_listing_price_usd,
-        Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
+        Listing.price_usd >= min_price_usd,
+        Listing.price_per_m2_usd >= min_ppm,
         Listing.rooms == listing.rooms,
         Listing.area_m2 >= min_area,
         Listing.area_m2 <= max_area,

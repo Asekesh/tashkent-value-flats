@@ -50,11 +50,12 @@ def get_listings(
     settings = get_settings()
     # Фильтры собираем в список условий, чтобы переиспользовать их и для
     # подсчёта total, и для самой страницы.
+    min_price_usd, min_ppm = settings.price_floors(deal_type)
     conditions = [
         Listing.status == "active",
         Listing.deal_type == deal_type,  # вкладка: продажа/аренда, дефолт sale (старый фронт)
-        Listing.price_usd >= settings.min_listing_price_usd,
-        Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
+        Listing.price_usd >= min_price_usd,
+        Listing.price_per_m2_usd >= min_ppm,
     ]
     if district:
         districts = [d.strip() for d in district.split(",") if d.strip()]
@@ -116,6 +117,7 @@ def get_listings_stats(
     deal_type: Literal["sale", "rent"] = "sale",
 ) -> dict:
     settings = get_settings()
+    min_price_usd, min_ppm = settings.price_floors(deal_type)
     rows = db.execute(
         select(
             Listing.source,
@@ -125,8 +127,8 @@ def get_listings_stats(
         ).where(
             Listing.status == "active",
             Listing.deal_type == deal_type,
-            Listing.price_usd >= settings.min_listing_price_usd,
-            Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
+            Listing.price_usd >= min_price_usd,
+            Listing.price_per_m2_usd >= min_ppm,
         )
     ).all()
 

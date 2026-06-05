@@ -367,13 +367,8 @@ def _is_known_listing(db: Session, source: str, source_id: str) -> bool:
 
 
 def _is_plausible_listing(raw, settings) -> bool:
-    # Пороги зависят от типа сделки: у аренды цена/м² в ~100x меньше, sale-пороги
-    # отрезали бы всю аренду.
-    if raw.deal_type == "rent":
-        min_price_usd = settings.min_rent_price_usd
-        min_price_per_m2_usd = settings.min_rent_price_per_m2_usd
-    else:
-        min_price_usd = settings.min_listing_price_usd
-        min_price_per_m2_usd = settings.min_listing_price_per_m2_usd
+    # Пороги зависят от типа сделки (у аренды цена/м² в ~100x меньше) — единый
+    # хелпер settings.price_floors, чтобы маппинг не дублировался.
+    min_price_usd, min_price_per_m2_usd = settings.price_floors(raw.deal_type)
     price_usd = to_usd(raw.price, raw.currency)
     return price_usd >= min_price_usd and price_per_m2(price_usd, raw.area_m2) >= min_price_per_m2_usd

@@ -28,6 +28,18 @@ MARKET_PRICE_MAX_USD_PER_M2 = 3000.0
 # показывать как «горячее» не стоит — это ломает доверие к продукту.
 MAX_REALISTIC_DISCOUNT_PERCENT = 30.0
 
+# Аренда (помесячная): цена/м² — за МЕСЯЦ. Реально ~$5-30/м²/мес; окно расширено,
+# вне него — мусор/перепутанный период.
+MARKET_RENT_PRICE_MIN_USD_PER_M2 = 2.0
+MARKET_RENT_PRICE_MAX_USD_PER_M2 = 60.0
+
+
+def market_price_bounds(deal_type: str) -> tuple[float, float]:
+    """Границы вменяемости медианы $/м² — у аренды свой масштаб (за месяц)."""
+    if deal_type == "rent":
+        return MARKET_RENT_PRICE_MIN_USD_PER_M2, MARKET_RENT_PRICE_MAX_USD_PER_M2
+    return MARKET_PRICE_MIN_USD_PER_M2, MARKET_PRICE_MAX_USD_PER_M2
+
 # Минимальные выборки. Building+rooms строже: при <5 одно бракованное
 # объявление перетягивает медиану и даёт фейковый «дисконт». Район
 # усредняет по сотням объявлений — можно мягче.

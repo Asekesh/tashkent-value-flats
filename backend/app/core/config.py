@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     min_rent_price_usd: float = 50.0
     min_rent_price_per_m2_usd: float = 0.3
     below_market_threshold: float = 0.15
+
+    def price_floors(self, deal_type: str) -> tuple[float, float]:
+        """Нижние пороги (price_usd, price/м²) для отбора вменяемых листингов —
+        зависят от типа сделки (у аренды свой масштаб). Единый источник истины
+        для скрейпа, CMA, API, SEO — чтобы маппинг не расползался по файлам."""
+        if deal_type == "rent":
+            return self.min_rent_price_usd, self.min_rent_price_per_m2_usd
+        return self.min_listing_price_usd, self.min_listing_price_per_m2_usd
     # Полный пересчёт оценок рынка для всех листингов. Дрейф медиан за неделю
     # на стабильном рынке Ташкента — единицы процентов, чаще не имеет смысла.
     # Каждый upsert и так считает свою оценку сразу; этот rebuild ловит drift

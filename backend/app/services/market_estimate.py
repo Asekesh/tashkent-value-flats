@@ -24,9 +24,8 @@ from app.core.config import get_settings
 from app.models import Listing
 from app.services.cma import AREA_TOLERANCE, build_cma
 from app.services.market import (
-    MARKET_PRICE_MAX_USD_PER_M2,
-    MARKET_PRICE_MIN_USD_PER_M2,
     MAX_REALISTIC_DISCOUNT_PERCENT,
+    market_price_bounds,
 )
 from app.services.segmentation import is_extreme_floor
 
@@ -76,9 +75,8 @@ def estimate_for_listing(db: Session, listing: Listing) -> ListingEstimate:
     market_price = cma.stats.median_price_per_m2_usd
     sample_size = cma.stats.count
 
-    if not market_price or not (
-        MARKET_PRICE_MIN_USD_PER_M2 <= market_price <= MARKET_PRICE_MAX_USD_PER_M2
-    ):
+    market_min, market_max = market_price_bounds(listing.deal_type)
+    if not market_price or not (market_min <= market_price <= market_max):
         return _empty(basis=cma.basis if cma.basis != "insufficient_data" else "insufficient_data")
 
     # Крайние этажи — структурно дешевле, дисконт не считаем (база
