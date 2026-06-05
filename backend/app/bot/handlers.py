@@ -25,12 +25,14 @@ from app.bot.keyboards import (
     feedback_kind_keyboard,
     floor_from_keyboard,
     floor_to_keyboard,
+    lang_keyboard,
     main_menu,
     price_from_keyboard,
     price_to_keyboard,
     rooms_keyboard,
     start_inline,
 )
+from app.bot.i18n import normalize_lang, pick_lang, t
 from app.bot.matcher import describe_alert
 from app.bot.states import Feedback, NewAlert
 from app.auth.dependencies import resolve_user_plan
@@ -61,28 +63,6 @@ async def on_bot_error(event: ErrorEvent) -> bool:
     logger.error("bot handler failed", exc_info=exc)
     return True
 
-HELP = (
-    "🤖 Бот следит за новыми объявлениями по Ташкенту и шлёт вам уведомления, "
-    "как только появится подходящая квартира.\n\n"
-    "<b>Как пользоваться:</b>\n"
-    "1️⃣ Нажмите <b>«➕ Новое уведомление»</b> и за пару шагов задайте фильтр "
-    "(район, комнаты, цена…).\n"
-    "2️⃣ Бот сам пришлёт сообщение, когда найдётся квартира под ваш фильтр.\n"
-    "3️⃣ В <b>«📋 Мои уведомления»</b> можно поставить на паузу или удалить.\n\n"
-    "<b>Команды:</b>\n"
-    "/new — настроить уведомления о новых квартирах\n"
-    "/list — мои уведомления\n"
-    "/help — помощь"
-)
-
-WELCOME = (
-    "Привет! 👋\n\n"
-    "Я собираю объявления о квартирах в Ташкенте сразу с трёх площадок — "
-    "<b>OLX, Uybor и Realt24</b> — и присылаю уведомление, как только появится "
-    "вариант под ваш фильтр.\n\n"
-    "Просто нажмите кнопку ниже — настроим за минуту 👇"
-)
-
 
 _SOURCE_RE = re.compile(r"[^A-Za-z0-9_-]")
 
@@ -101,7 +81,13 @@ def _ensure_user(
     username: Optional[str],
     first_name: Optional[str],
     source: Optional[str] = None,
-) -> int:
+    language_code: Optional[str] = None,
+) -> tuple[int, str]:
+    """Создаёт/обновляет пользователя, возвращает (id, lang).
+
+    Язык ставится один раз при создании (по Telegram language_code) и дальше
+    не перетирается — пользователь мог сменить его вручную кнопкой в меню.
+    """
     now = datetime.utcnow()
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.telegram_id == tg_id))
@@ -112,6 +98,7 @@ def _ensure_user(
                 first_name=first_name,
                 source=source,
                 last_seen_at=now,
+                lang=pick_lang(language_code),
             )
             db.add(user)
         else:
@@ -124,7 +111,15 @@ def _ensure_user(
         mark_active(db, user.id, now)
         db.commit()
         db.refresh(user)
-        return user.id
+        return user.id, normalize_lang(user.lang)
+
+
+def _set_lang(tg_id: int, lang: str) -> None:
+    with SessionLocal() as db:
+        user = db.scalar(select(User).where(User.telegram_id == tg_id))
+        if user is not None:
+            user.lang = normalize_lang(lang)
+            db.commit()
 
 
 # ---------- /start, /help, menu buttons ----------
@@ -133,65 +128,104 @@ def _ensure_user(
 async def cmd_start(msg: Message, command: CommandObject) -> None:
     # Deep-link t.me/uyradaruz_bot?start=<источник> — ловим payload (атрибуция).
     source = _clean_source(command.args)
-    _ensure_user(
-        msg.from_user.id, msg.from_user.username, msg.from_user.first_name, source=source
+    _, lang = _ensure_user(
+        msg.from_user.id,
+        msg.from_user.username,
+        msg.from_user.first_name,
+        source=source,
+        language_code=msg.from_user.language_code,
     )
     # сначала ставим reply-клавиатуру, затем — крупные inline-кнопки для новичков
-    await msg.answer(WELCOME, reply_markup=main_menu())
-    await msg.answer("Что хотите сделать?", reply_markup=start_inline())
+    await msg.answer(t("welcome", lang), reply_markup=main_menu(lang))
+    await msg.answer(t("choose_action", lang), reply_markup=start_inline(lang))
 
 
 @router.message(Command("help"))
-@router.message(F.text == "ℹ️ Помощь")
+@router.message(F.text.in_({"ℹ️ Помощь", "ℹ️ Yordam"}))
 async def cmd_help(msg: Message) -> None:
-    await msg.answer(HELP, reply_markup=main_menu())
+    _, lang = _ensure_user(
+        msg.from_user.id, msg.from_user.username, msg.from_user.first_name,
+        language_code=msg.from_user.language_code,
+    )
+    await msg.answer(t("help", lang), reply_markup=main_menu(lang))
+
+
+# ---------- Смена языка ----------
+
+@router.message(F.text == "🌐 Til / Язык")
+async def cmd_lang(msg: Message) -> None:
+    _, lang = _ensure_user(
+        msg.from_user.id, msg.from_user.username, msg.from_user.first_name,
+        language_code=msg.from_user.language_code,
+    )
+    await msg.answer(t("lang_choose", lang), reply_markup=lang_keyboard())
+
+
+@router.callback_query(F.data.startswith("setlang:"))
+async def on_set_lang(cb: CallbackQuery) -> None:
+    lang = normalize_lang(cb.data.split(":", 1)[1])
+    _ensure_user(
+        cb.from_user.id, cb.from_user.username, cb.from_user.first_name,
+        language_code=cb.from_user.language_code,
+    )
+    _set_lang(cb.from_user.id, lang)
+    await cb.message.answer(t("lang_done", lang), reply_markup=main_menu(lang))
+    await cb.answer()
 
 
 # ---------- Обратная связь ----------
 
-async def _begin_feedback(msg: Message, state: FSMContext) -> None:
+async def _begin_feedback(msg: Message, lang: str, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(Feedback.kind)
+    await state.update_data(lang=lang)
     await msg.answer(
-        "Спасибо, что помогаете нам стать лучше! Что хотите сообщить?",
-        reply_markup=feedback_kind_keyboard(),
+        t("feedback_intro", lang),
+        reply_markup=feedback_kind_keyboard(lang),
     )
 
 
-@router.message(F.text == "✍️ Обратная связь")
+@router.message(F.text.in_({"✍️ Обратная связь", "✍️ Fikr-mulohaza"}))
 async def cmd_feedback(msg: Message, state: FSMContext) -> None:
-    await _begin_feedback(msg, state)
+    _, lang = _ensure_user(
+        msg.from_user.id, msg.from_user.username, msg.from_user.first_name,
+        language_code=msg.from_user.language_code,
+    )
+    await _begin_feedback(msg, lang, state)
 
 
 @router.callback_query(F.data == "start:feedback")
 async def start_feedback(cb: CallbackQuery, state: FSMContext) -> None:
-    await _begin_feedback(cb.message, state)
+    _, lang = _ensure_user(
+        cb.from_user.id, cb.from_user.username, cb.from_user.first_name,
+        language_code=cb.from_user.language_code,
+    )
+    await _begin_feedback(cb.message, lang, state)
     await cb.answer()
 
 
 @router.callback_query(Feedback.kind, F.data.startswith("fb:"))
 async def on_feedback_kind(cb: CallbackQuery, state: FSMContext) -> None:
     kind = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     await state.update_data(kind=kind)
     await state.set_state(Feedback.text)
-    prompt = (
-        "Опишите ошибку — что произошло и что ожидали 👇"
-        if kind == "bug"
-        else "Напишите ваше пожелание или идею 👇"
-    )
+    prompt = t("feedback_bug", lang) if kind == "bug" else t("feedback_feature", lang)
     await cb.message.edit_text(prompt)
     await cb.answer()
 
 
 @router.message(Feedback.text)
 async def on_feedback_text(msg: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     text = (msg.text or "").strip()[:2000]
     if not text:
-        await msg.answer("Напишите, пожалуйста, текст сообщения.")
+        await msg.answer(t("feedback_empty", lang))
         return
-    data = await state.get_data()
     kind = data.get("kind") or "bug"
-    user_id = _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
+    user_id, _ = _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
     contact = msg.from_user.username or msg.from_user.first_name or f"id{msg.from_user.id}"
 
     with SessionLocal() as db:
@@ -207,26 +241,29 @@ async def on_feedback_text(msg: Message, state: FSMContext) -> None:
     notify_admins_new_feedback(kind, text, contact, "bot")
     await state.clear()
     await msg.answer(
-        "✅ Спасибо! Сообщение отправлено — мы обязательно его прочитаем.",
-        reply_markup=main_menu(),
+        t("feedback_thanks", lang),
+        reply_markup=main_menu(lang),
     )
 
 
 # ---------- /new flow ----------
 
 async def _begin_new_alert(msg: Message, user, state: FSMContext) -> None:
-    _ensure_user(user.id, user.username, user.first_name)
+    _, lang = _ensure_user(
+        user.id, user.username, user.first_name,
+        language_code=getattr(user, "language_code", None),
+    )
     await state.clear()
     await state.set_state(NewAlert.districts)
-    await state.update_data(districts=set())
+    await state.update_data(districts=set(), lang=lang)
     await msg.answer(
-        "Шаг 1/6. Выберите районы (можно несколько):",
-        reply_markup=districts_keyboard(set()),
+        t("step_districts", lang),
+        reply_markup=districts_keyboard(set(), lang),
     )
 
 
 @router.message(Command("new"))
-@router.message(F.text == "➕ Новое уведомление")
+@router.message(F.text.in_({"➕ Новое уведомление", "➕ Yangi bildirishnoma"}))
 async def cmd_new(msg: Message, state: FSMContext) -> None:
     await _begin_new_alert(msg, msg.from_user, state)
 
@@ -234,11 +271,14 @@ async def cmd_new(msg: Message, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("edit:"))
 async def on_edit(cb: CallbackQuery, state: FSMContext) -> None:
     alert_id = int(cb.data.split(":", 1)[1])
-    user_id = _ensure_user(cb.from_user.id, cb.from_user.username, cb.from_user.first_name)
+    user_id, lang = _ensure_user(
+        cb.from_user.id, cb.from_user.username, cb.from_user.first_name,
+        language_code=cb.from_user.language_code,
+    )
     with SessionLocal() as db:
         alert = db.get(Alert, alert_id)
         if alert is None or alert.user_id != user_id:
-            await cb.answer("Не нашёл уведомление.", show_alert=True)
+            await cb.answer(t("not_found", lang), show_alert=True)
             return
         districts = set((alert.districts or "").split(",")) - {""}
         rooms = {int(r) for r in (alert.rooms or "").split(",") if r}
@@ -257,10 +297,10 @@ async def on_edit(cb: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
     await state.set_state(NewAlert.districts)
-    await state.update_data(**prefill)
+    await state.update_data(**prefill, lang=lang)
     await cb.message.answer(
-        "✏️ Меняем фильтр. Шаг 1/6. Выберите районы (можно несколько):",
-        reply_markup=districts_keyboard(districts),
+        t("step_districts_edit", lang),
+        reply_markup=districts_keyboard(districts, lang),
     )
     await cb.answer()
 
@@ -281,7 +321,11 @@ async def start_list(cb: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "start:help")
 async def start_help(cb: CallbackQuery) -> None:
-    await cb.message.answer(HELP, reply_markup=main_menu())
+    _, lang = _ensure_user(
+        cb.from_user.id, cb.from_user.username, cb.from_user.first_name,
+        language_code=cb.from_user.language_code,
+    )
+    await cb.message.answer(t("help", lang), reply_markup=main_menu(lang))
     await cb.answer()
 
 
@@ -289,21 +333,22 @@ async def start_help(cb: CallbackQuery) -> None:
 async def on_district(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
     data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     selected: set[str] = set(data.get("districts") or set())
 
     if payload == "any":
         selected.clear()
         await state.update_data(districts=selected)
-        await cb.message.edit_reply_markup(reply_markup=districts_keyboard(selected))
-        await cb.answer("Сброшено — любой район")
+        await cb.message.edit_reply_markup(reply_markup=districts_keyboard(selected, lang))
+        await cb.answer(t("reset_district", lang))
         return
 
     if payload == "done":
         await state.set_state(NewAlert.rooms)
         await state.update_data(rooms=set())
         await cb.message.edit_text(
-            "Шаг 2/6. Сколько комнат?",
-            reply_markup=rooms_keyboard(set()),
+            t("step_rooms", lang),
+            reply_markup=rooms_keyboard(set(), lang),
         )
         await cb.answer()
         return
@@ -315,7 +360,7 @@ async def on_district(cb: CallbackQuery, state: FSMContext) -> None:
     else:
         selected.add(district)
     await state.update_data(districts=selected)
-    await cb.message.edit_reply_markup(reply_markup=districts_keyboard(selected))
+    await cb.message.edit_reply_markup(reply_markup=districts_keyboard(selected, lang))
     await cb.answer()
 
 
@@ -323,20 +368,21 @@ async def on_district(cb: CallbackQuery, state: FSMContext) -> None:
 async def on_rooms(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
     data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     selected: set[int] = set(data.get("rooms") or set())
 
     if payload == "any":
         selected.clear()
         await state.update_data(rooms=selected)
-        await cb.message.edit_reply_markup(reply_markup=rooms_keyboard(selected))
-        await cb.answer("Сброшено — любое")
+        await cb.message.edit_reply_markup(reply_markup=rooms_keyboard(selected, lang))
+        await cb.answer(t("reset_any", lang))
         return
 
     if payload == "done":
         await state.set_state(NewAlert.price)
         await cb.message.edit_text(
-            "Шаг 3/7. Цена (USD). Сначала выберите минимум (<b>от</b>):",
-            reply_markup=price_from_keyboard(),
+            t("step_price_min", lang),
+            reply_markup=price_from_keyboard(lang),
         )
         await cb.answer()
         return
@@ -347,7 +393,7 @@ async def on_rooms(cb: CallbackQuery, state: FSMContext) -> None:
     else:
         selected.add(n)
     await state.update_data(rooms=selected)
-    await cb.message.edit_reply_markup(reply_markup=rooms_keyboard(selected))
+    await cb.message.edit_reply_markup(reply_markup=rooms_keyboard(selected, lang))
     await cb.answer()
 
 
@@ -356,6 +402,8 @@ async def on_rooms(cb: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(NewAlert.price, F.data.startswith("pmin:"))
 async def on_price_min(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     if payload == "any":
         await state.update_data(price_min=None, price_min_idx=None)
         idx = None
@@ -363,8 +411,8 @@ async def on_price_min(cb: CallbackQuery, state: FSMContext) -> None:
         idx = int(payload)
         await state.update_data(price_min=float(PRICE_VALUES[idx]), price_min_idx=idx)
     await cb.message.edit_text(
-        "Шаг 3/7. Теперь максимум цены (<b>до</b>):",
-        reply_markup=price_to_keyboard(idx),
+        t("step_price_max", lang),
+        reply_markup=price_to_keyboard(idx, lang),
     )
     await cb.answer()
 
@@ -372,14 +420,16 @@ async def on_price_min(cb: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(NewAlert.price, F.data.startswith("pmax:"))
 async def on_price_max(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     if payload == "any":
         await state.update_data(price_max=None)
     else:
         await state.update_data(price_max=float(PRICE_VALUES[int(payload)]))
     await state.set_state(NewAlert.area)
     await cb.message.edit_text(
-        "Шаг 4/7. Площадь, м². Сначала минимум (<b>от</b>):",
-        reply_markup=area_from_keyboard(),
+        t("step_area_min", lang),
+        reply_markup=area_from_keyboard(lang),
     )
     await cb.answer()
 
@@ -389,6 +439,8 @@ async def on_price_max(cb: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(NewAlert.area, F.data.startswith("amin:"))
 async def on_area_min(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     if payload == "any":
         await state.update_data(area_min=None)
         idx = None
@@ -396,8 +448,8 @@ async def on_area_min(cb: CallbackQuery, state: FSMContext) -> None:
         idx = int(payload)
         await state.update_data(area_min=float(AREA_VALUES[idx]))
     await cb.message.edit_text(
-        "Шаг 4/7. Теперь максимум площади (<b>до</b>):",
-        reply_markup=area_to_keyboard(idx),
+        t("step_area_max", lang),
+        reply_markup=area_to_keyboard(idx, lang),
     )
     await cb.answer()
 
@@ -405,14 +457,16 @@ async def on_area_min(cb: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(NewAlert.area, F.data.startswith("amax:"))
 async def on_area_max(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     if payload == "any":
         await state.update_data(area_max=None)
     else:
         await state.update_data(area_max=float(AREA_VALUES[int(payload)]))
     await state.set_state(NewAlert.floor)
     await cb.message.edit_text(
-        "Шаг 5/7. Этаж. Сначала минимум (<b>от</b>):",
-        reply_markup=floor_from_keyboard(),
+        t("step_floor_min", lang),
+        reply_markup=floor_from_keyboard(lang),
     )
     await cb.answer()
 
@@ -422,6 +476,8 @@ async def on_area_max(cb: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(NewAlert.floor, F.data.startswith("fmin:"))
 async def on_floor_min(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     if payload == "any":
         await state.update_data(floor_min=None)
         idx = None
@@ -429,8 +485,8 @@ async def on_floor_min(cb: CallbackQuery, state: FSMContext) -> None:
         idx = int(payload)
         await state.update_data(floor_min=FLOOR_VALUES[idx])
     await cb.message.edit_text(
-        "Шаг 5/7. Теперь максимум этажа (<b>до</b>):",
-        reply_markup=floor_to_keyboard(idx),
+        t("step_floor_max", lang),
+        reply_markup=floor_to_keyboard(idx, lang),
     )
     await cb.answer()
 
@@ -438,14 +494,16 @@ async def on_floor_min(cb: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(NewAlert.floor, F.data.startswith("fmax:"))
 async def on_floor_max(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     if payload == "any":
         await state.update_data(floor_max=None)
     else:
         await state.update_data(floor_max=FLOOR_VALUES[int(payload)])
     await state.set_state(NewAlert.discount)
     await cb.message.edit_text(
-        "Шаг 6/7. Насколько ниже рынка должна быть цена?",
-        reply_markup=discount_keyboard(),
+        t("step_discount", lang),
+        reply_markup=discount_keyboard(lang),
     )
     await cb.answer()
 
@@ -455,24 +513,24 @@ async def on_floor_max(cb: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(NewAlert.discount, F.data.startswith("disc:"))
 async def on_discount(cb: CallbackQuery, state: FSMContext) -> None:
     payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
     if payload == "any":
         await state.update_data(discount_min=None)
     else:
         _, frac = DISCOUNT_PRESETS[int(payload)]
         await state.update_data(discount_min=frac)
     await state.set_state(NewAlert.name)
-    await cb.message.edit_text(
-        "Шаг 7/7. Как назвать этот фильтр? Напишите любое короткое имя "
-        "(например «3-комн. Юнусабад»)."
-    )
+    await cb.message.edit_text(t("step_name", lang))
     await cb.answer()
 
 
 @router.message(NewAlert.name)
 async def set_name(msg: Message, state: FSMContext) -> None:
-    name = (msg.text or "").strip()[:80] or "Без имени"
     data = await state.get_data()
-    user_id = _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
+    lang = normalize_lang(data.get("lang"))
+    name = (msg.text or "").strip()[:80] or t("noname", lang)
+    user_id, _ = _ensure_user(msg.from_user.id, msg.from_user.username, msg.from_user.first_name)
 
     districts = sorted(data.get("districts") or set())
     rooms = sorted(int(r) for r in (data.get("rooms") or set()))
@@ -496,7 +554,7 @@ async def set_name(msg: Message, state: FSMContext) -> None:
             alert = db.get(Alert, editing_id)
             if alert is None or alert.user_id != user_id:
                 await state.clear()
-                await msg.answer("Не нашёл уведомление для изменения.", reply_markup=main_menu())
+                await msg.answer(t("not_found_edit", lang), reply_markup=main_menu(lang))
                 return
             for key, value in fields.items():
                 setattr(alert, key, value)
@@ -522,21 +580,23 @@ async def set_name(msg: Message, state: FSMContext) -> None:
             db.add(alert)
         db.commit()
         db.refresh(alert)
-        summary = describe_alert(alert)
+        summary = describe_alert(alert, lang)
 
     await state.clear()
-    verb = "обновлено" if editing_id is not None else "создано"
+    verb = t("verb_updated", lang) if editing_id is not None else t("verb_created", lang)
     await msg.answer(
-        f"✅ Уведомление <b>«{name}»</b> {verb}.\n\n{summary}\n\n"
-        "Теперь я пришлю сообщение, как только появится подходящая квартира.",
-        reply_markup=main_menu(),
+        t("saved", lang, name=name, verb=verb, summary=summary),
+        reply_markup=main_menu(lang),
     )
 
 
 # ---------- /list ----------
 
 async def _send_alerts(msg: Message, user) -> None:
-    user_id = _ensure_user(user.id, user.username, user.first_name)
+    user_id, lang = _ensure_user(
+        user.id, user.username, user.first_name,
+        language_code=getattr(user, "language_code", None),
+    )
     with SessionLocal() as db:
         alerts = db.scalars(
             select(Alert).where(Alert.user_id == user_id).order_by(Alert.id.desc())
@@ -544,19 +604,19 @@ async def _send_alerts(msg: Message, user) -> None:
 
     if not alerts:
         await msg.answer(
-            "Уведомлений пока нет. Нажмите «➕ Новое уведомление», чтобы создать первое.",
-            reply_markup=main_menu(),
+            t("no_alerts", lang),
+            reply_markup=main_menu(lang),
         )
         return
 
     for a in alerts:
-        status = "🟢 активно" if a.is_active else "⏸ на паузе"
-        text = f"<b>{a.name}</b> · {status}\n\n{describe_alert(a)}"
-        await msg.answer(text, reply_markup=alert_actions(a.id, a.is_active))
+        status = t("status_active", lang) if a.is_active else t("status_paused", lang)
+        text = f"<b>{a.name}</b> · {status}\n\n{describe_alert(a, lang)}"
+        await msg.answer(text, reply_markup=alert_actions(a.id, a.is_active, lang))
 
 
 @router.message(Command("list"))
-@router.message(F.text == "📋 Мои уведомления")
+@router.message(F.text.in_({"📋 Мои уведомления", "📋 Mening bildirishnomalarim"}))
 async def cmd_list(msg: Message) -> None:
     await _send_alerts(msg, msg.from_user)
 
@@ -564,39 +624,43 @@ async def cmd_list(msg: Message) -> None:
 @router.callback_query(F.data.startswith("toggle:"))
 async def on_toggle(cb: CallbackQuery) -> None:
     alert_id = int(cb.data.split(":", 1)[1])
+    user_id, lang = _ensure_user(
+        cb.from_user.id, cb.from_user.username, cb.from_user.first_name,
+        language_code=cb.from_user.language_code,
+    )
     with SessionLocal() as db:
         alert = db.get(Alert, alert_id)
-        if alert is None or alert.user_id != _ensure_user(
-            cb.from_user.id, cb.from_user.username, cb.from_user.first_name
-        ):
-            await cb.answer("Не нашёл уведомление.", show_alert=True)
+        if alert is None or alert.user_id != user_id:
+            await cb.answer(t("not_found", lang), show_alert=True)
             return
         alert.is_active = not alert.is_active
         db.commit()
         new_state = alert.is_active
         name = alert.name
-        summary = describe_alert(alert)
+        summary = describe_alert(alert, lang)
 
-    status = "🟢 активно" if new_state else "⏸ на паузе"
+    status = t("status_active", lang) if new_state else t("status_paused", lang)
     await cb.message.edit_text(
         f"<b>{name}</b> · {status}\n\n{summary}",
-        reply_markup=alert_actions(alert_id, new_state),
+        reply_markup=alert_actions(alert_id, new_state, lang),
     )
-    await cb.answer("Готово")
+    await cb.answer(t("done", lang))
 
 
 @router.callback_query(F.data.startswith("del:"))
 async def on_delete(cb: CallbackQuery) -> None:
     alert_id = int(cb.data.split(":", 1)[1])
+    user_id, lang = _ensure_user(
+        cb.from_user.id, cb.from_user.username, cb.from_user.first_name,
+        language_code=cb.from_user.language_code,
+    )
     with SessionLocal() as db:
         alert = db.get(Alert, alert_id)
-        if alert is None or alert.user_id != _ensure_user(
-            cb.from_user.id, cb.from_user.username, cb.from_user.first_name
-        ):
-            await cb.answer("Не нашёл уведомление.", show_alert=True)
+        if alert is None or alert.user_id != user_id:
+            await cb.answer(t("not_found", lang), show_alert=True)
             return
         db.delete(alert)
         db.commit()
 
-    await cb.message.edit_text("🗑 Уведомление удалено.")
+    await cb.message.edit_text(t("deleted", lang))
     await cb.answer()

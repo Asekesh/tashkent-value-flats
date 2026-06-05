@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.bot.i18n import DEFAULT_LANG, rooms_label, t
 from app.models import Alert, Listing
 
 
@@ -55,17 +56,19 @@ def alert_matches_listing(alert: Alert, listing: Listing) -> bool:
     return True
 
 
-def describe_alert(alert: Alert) -> str:
+def describe_alert(alert: Alert, lang: str = DEFAULT_LANG) -> str:
     parts: list[str] = []
     districts = _csv_list(alert.districts)
     if districts:
         parts.append("📍 " + ", ".join(d.replace("ский район", "").replace(" район", "") for d in districts))
     else:
-        parts.append("📍 любой район")
+        parts.append("📍 " + t("da_any_district", lang))
 
     rooms = _csv_list(alert.rooms)
     if rooms:
-        parts.append("🛏 " + "/".join(rooms) + "к")
+        # «1/2/3к» (ru) / «1/2/3 xona» (uz): единицу берём из rooms_label.
+        suffix = rooms_label(0, lang)[1:]  # отрезаем "0" → "к" / " xona"
+        parts.append("🛏 " + "/".join(rooms) + suffix)
 
     if alert.price_min is not None or alert.price_max is not None:
         lo = f"${int(alert.price_min):,}" if alert.price_min else "—"
@@ -85,9 +88,9 @@ def describe_alert(alert: Alert) -> str:
     if alert.floor_min is not None or alert.floor_max is not None:
         lo = str(int(alert.floor_min)) if alert.floor_min else "—"
         hi = str(int(alert.floor_max)) if alert.floor_max else "—"
-        parts.append(f"🏢 этаж {lo}…{hi}")
+        parts.append(f"🏢 {t('da_floor', lang)} {lo}…{hi}")
 
     if alert.discount_min is not None:
-        parts.append(f"🎯 скидка ≥ {int(alert.discount_min * 100)}%")
+        parts.append("🎯 " + t("da_discount", lang, pct=int(alert.discount_min * 100)))
 
     return "\n".join(parts)

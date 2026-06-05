@@ -35,3 +35,6 @@ class User(Base):
     last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     # Канал привлечения (first-touch): start-param бота или utm. NULL = legacy/unknown.
     source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Язык интерфейса бота: 'ru'/'uz'. Ставится по Telegram language_code при
+    # первом /start, дальше пользователь может сменить кнопкой в меню.
+    lang: Mapped[str] = mapped_column(String(2), default="ru", server_default="ru")

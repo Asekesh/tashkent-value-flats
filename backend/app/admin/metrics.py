@@ -371,6 +371,13 @@ def dashboard_metrics(db: Session) -> dict[str, Any]:
     ).all():
         account_types[account_type] = count
 
+    # Язык интерфейса бота: сколько выбрали узбекский (сенсор спроса на UZ).
+    lang_counts = {"ru": 0, "uz": 0}
+    for lang, count in db.execute(
+        select(User.lang, func.count(User.id)).group_by(User.lang)
+    ).all():
+        lang_counts[lang if lang in lang_counts else "ru"] += count
+
     users_with_sub = (
         db.scalar(
             select(func.count(func.distinct(Subscription.user_id))).where(
@@ -429,6 +436,7 @@ def dashboard_metrics(db: Session) -> dict[str, Any]:
         "new_30d": new_30d,
         "logins_7d": logins_7d,
         "account_types": account_types,
+        "lang_counts": lang_counts,
         "plans": plans,
         "registrations": registrations,
         "registrations_max": max_reg,
