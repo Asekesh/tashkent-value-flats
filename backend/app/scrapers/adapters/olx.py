@@ -107,6 +107,12 @@ class OlxAdapter(SourceAdapter):
                 listings.append(raw)
                 seen.add(raw.source_id)
         for raw in listings:
+            # RawListing'и строятся в module-функциях без self — проставляем
+            # deal_type/период здесь, на границе адаптера. Долгосрочная аренда OLX
+            # помесячная.
+            raw.deal_type = self.deal_type
+            if self.deal_type == "rent":
+                raw.price_period = "month"
             if not raw.photos:
                 raw.photos = photo_map.get(raw.source_id) or photo_map.get(
                     _source_id_from_url(raw.url)
@@ -138,6 +144,14 @@ class OlxAdapter(SourceAdapter):
         """Back-compat wrapper around :meth:`probe_listing`."""
         probe = self.probe_listing(url, client)
         return None if probe.is_gone else probe.photos
+
+
+class OlxRentAdapter(OlxAdapter):
+    """Долгосрочная (помесячная) аренда OLX. source остаётся 'olx' (платформа),
+    меняется только раздел поиска и deal_type."""
+
+    deal_type = "rent"
+    search_url = "https://www.olx.uz/nedvizhimost/kvartiry/arenda-dolgosrochnaya/tashkent/"
 
 
 _PRERENDERED_STATE_RE = re.compile(

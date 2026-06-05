@@ -64,15 +64,14 @@ def run_scrape_for_source(db: Session, source: str, mode: str = "auto", trigger:
                 max_pages=settings.live_scrape_max_pages,
                 delay_seconds=settings.live_scrape_delay_seconds,
                 quick_known_stop_threshold=settings.quick_known_stop_threshold,
-                min_price_usd=settings.min_listing_price_usd,
-                min_price_per_m2_usd=settings.min_listing_price_per_m2_usd,
+                settings=settings,
             )
         else:
             raw_listings = parse_fixture(source)
             new_count = 0
             updated_count = 0
             for raw in raw_listings:
-                if not _is_plausible_listing(raw, settings.min_listing_price_usd, settings.min_listing_price_per_m2_usd):
+                if not _is_plausible_listing(raw, settings):
                     continue
                 _, is_new = upsert_raw_listing(db, raw)
                 if is_new:
@@ -83,8 +82,8 @@ def run_scrape_for_source(db: Session, source: str, mode: str = "auto", trigger:
         run.new_count = new_count
         run.updated_count = updated_count
         if use_live and mode in {"full", "live"}:
-            mark_delisted_for_source(db, source)
-            if source == "olx":
+            mark_delisted_for_source(db, adapter.source, deal_type=adapter.deal_type)
+            if adapter.source == "olx":
                 # OLX hides archived ads from search immediately; the 3-day
                 # delist heuristic above is too slow, so probe detail pages.
                 db.commit()
@@ -220,8 +219,7 @@ def _run_live_scan(
     max_pages: int,
     delay_seconds: float,
     quick_known_stop_threshold: int,
-    min_price_usd: float,
-    min_price_per_m2_usd: float,
+    settings,
 ) -> tuple[int, int]:
     page_limit = None if mode in {"quick", "full"} else max_pages
     known_stop = quick_known_stop_threshold if mode == "quick" else None
@@ -254,7 +252,7 @@ def _run_live_scan(
                         # — on a market-wide FX move that pushes every row out of the
                         # window — fire an unbounded sequential probe storm.
                         raw = _reprobe_known_olx_listing(db, raw, adapter, detail_client)
-                if not _is_plausible_listing(raw, min_price_usd, min_price_per_m2_usd):
+                if not _is_plausible_listing(raw, settings):
                     continue
                 _, is_new = upsert_raw_listing(db, raw)
                 if is_new:
@@ -362,6 +360,14 @@ def _is_known_listing(db: Session, source: str, source_id: str) -> bool:
     return db.scalar(select(Listing.id).where(Listing.source == source, Listing.source_id == source_id)) is not None
 
 
-def _is_plausible_listing(raw, min_price_usd: float, min_price_per_m2_usd: float) -> bool:
+def _is_plausible_listing(raw, settings) -> bool:
+    # Пороги зависят от типа сделки: у аренды цена/м² в ~100x меньше, sale-пороги
+    # отрезали бы всю аренду.
+    if raw.deal_type == "rent":
+        min_price_usd = settings.min_rent_price_usd
+        min_price_per_m2_usd = settings.min_rent_price_per_m2_usd
+    else:
+        min_price_usd = settings.min_listing_price_usd
+        min_price_per_m2_usd = settings.min_listing_price_per_m2_usd
     price_usd = to_usd(raw.price, raw.currency)
     return price_usd >= min_price_usd and price_per_m2(price_usd, raw.area_m2) >= min_price_per_m2_usd

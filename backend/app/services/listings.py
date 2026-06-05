@@ -188,6 +188,8 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         listing.description = raw.description
         listing.photos = dumps_json(raw.photos)
         listing.seller_type = raw.seller_type
+        listing.deal_type = raw.deal_type
+        listing.price_period = raw.price_period
         listing.published_at = raw.published_at
     # Floor is a physical property of the flat, identical across reposts — fill
     # it from any incoming row that knows it, even a not-cheaper duplicate that
@@ -308,16 +310,24 @@ def count_listings(db: Session, stmt) -> int:
     return int(db.scalar(count_stmt) or 0)
 
 
-def mark_delisted_for_source(db: Session, source: str, threshold_days: int = DELIST_THRESHOLD_DAYS) -> int:
+def mark_delisted_for_source(
+    db: Session,
+    source: str,
+    threshold_days: int = DELIST_THRESHOLD_DAYS,
+    deal_type: str | None = None,
+) -> int:
     now = utcnow()
     cutoff = now - timedelta(days=threshold_days)
-    stale = db.scalars(
-        select(Listing).where(
-            Listing.source == source,
-            Listing.status == "active",
-            Listing.seen_at < cutoff,
-        )
-    ).all()
+    # deal_type заскоуплен: sale-скан не должен снимать rent-листинги той же
+    # площадки (source у них общий — 'uybor'/'olx'), и наоборот.
+    conditions = [
+        Listing.source == source,
+        Listing.status == "active",
+        Listing.seen_at < cutoff,
+    ]
+    if deal_type is not None:
+        conditions.append(Listing.deal_type == deal_type)
+    stale = db.scalars(select(Listing).where(*conditions)).all()
     for listing in stale:
         prev_price = listing.price_usd
         listing.status = "removed"

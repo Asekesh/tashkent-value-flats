@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.models import Listing, ListingEvent
 from app.scrapers.base import RawListing
 from app.services.listings import upsert_raw_listing
@@ -111,8 +112,7 @@ def _run_quick(db, adapter):
         max_pages=1,
         delay_seconds=0,
         quick_known_stop_threshold=50,
-        min_price_usd=5_000,
-        min_price_per_m2_usd=100,
+        settings=get_settings(),
     )
 
 
@@ -219,8 +219,7 @@ def test_new_olx_live_scan_uses_detail_price_before_insert(db_session):
         max_pages=1,
         delay_seconds=0,
         quick_known_stop_threshold=50,
-        min_price_usd=5_000,
-        min_price_per_m2_usd=100,
+        settings=get_settings(),
     )
 
     listing = db_session.scalar(select(Listing).where(Listing.source == "olx", Listing.source_id == "ID4nNtY"))

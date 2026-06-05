@@ -23,6 +23,8 @@ class RawListing:
     photos: list[str] = field(default_factory=list)
     seller_type: str | None = None
     published_at: datetime | None = None
+    deal_type: str = "sale"          # "sale" | "rent"
+    price_period: str | None = None  # "month" | "day"; только для аренды
 
 
 @dataclass
@@ -38,6 +40,7 @@ class SourceAdapter:
     fixture_name: str
     supports_live: bool = False
     page_size: int | None = None
+    deal_type: str = "sale"  # "sale" | "rent"; rent-варианты переопределяют
 
     def parse(self, html: str) -> list[RawListing]:
         raise NotImplementedError

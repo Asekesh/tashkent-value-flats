@@ -4,7 +4,9 @@ from app.services.scrape import run_scrape
 
 def test_scrape_run_and_listing_filters(client, db_session):
     runs = run_scrape(db_session, source="all")
-    assert {run.source for run in runs} == {"olx", "uybor", "realt24"}
+    # «all» теперь включает rent-джобы (olx_rent/uybor_rent) — отдельные scrape-раны
+    # по той же площадке, но с deal_type='rent'.
+    assert {run.source for run in runs} == {"olx", "uybor", "realt24", "olx_rent", "uybor_rent"}
     # Полный пересчёт после скрейпа (в проде делается недельным rebuild loop'ом
     # либо разовой CLI; в тесте дёргаем вручную, чтобы поймать дрейф соседей).
     recompute_market(db_session)

@@ -25,6 +25,7 @@ class UyborAdapter(SourceAdapter):
     fixture_name = "uybor.html"
     supports_live = True
     page_size = 50
+    operation_type = "sale"  # rent-вариант переопределяет на "rent"
     api_url = "https://api.uybor.uz/api/v1/listings"
     locations_url = "https://api.uybor.uz/api/v1/listings/locations"
     public_url_template = "https://uybor.uz/listings/{source_id}"
@@ -71,7 +72,7 @@ class UyborAdapter(SourceAdapter):
         response = client.get(
             self.api_url,
             params={
-                "operationType__eq": "sale",
+                "operationType__eq": self.operation_type,
                 "category__eq": 7,
                 "region__eq": 13,
                 "isActive__eq": "true",
@@ -136,6 +137,15 @@ class UyborAdapter(SourceAdapter):
             for photo in item.get("media", [])
             if isinstance(photo, dict) and compact_text(photo.get("url"))
         ][:8]
+        # Аренда: берём только помесячную (MVP). Посуточная (pricePeriodUnit='day')
+        # — другой рынок с другим масштабом цены/м², её пока не наливаем.
+        if self.deal_type == "rent":
+            period = compact_text(str(item.get("pricePeriodUnit") or "")).lower()
+            if period != "month":
+                return None
+            price_period: str | None = "month"
+        else:
+            price_period = None
         title = _title_for(item, rooms, area_m2, floor, total_floors)
         return RawListing(
             source=self.source,
@@ -154,7 +164,17 @@ class UyborAdapter(SourceAdapter):
             photos=photos,
             seller_type=None,
             published_at=parse_iso_datetime(item.get("upAt") or item.get("createdAt")),
+            deal_type=self.deal_type,
+            price_period=price_period,
         )
+
+
+class UyborRentAdapter(UyborAdapter):
+    """Помесячная аренда Uybor. source остаётся 'uybor' (платформа), отличие —
+    в deal_type/operation_type. Дедуп/выдача/делистинг разводятся по deal_type."""
+
+    deal_type = "rent"
+    operation_type = "rent"
 
 
 def _rooms_from_value(value: Any) -> int | None:
