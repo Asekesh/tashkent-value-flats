@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import asc, func, nulls_last, select
+from sqlalchemy import and_, asc, func, nulls_last, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -41,6 +41,8 @@ def get_listings(
     floor_min: Optional[int] = None,
     floor_max: Optional[int] = None,
     discount_min: Optional[float] = None,
+    q: Optional[str] = None,  # «содержит»: слова в заголовке+описании, нужны ВСЕ
+    exclude: Optional[str] = None,  # «исключить»: выкинуть, если есть ЛЮБОЕ слово
     source: Optional[str] = None,
     deal_type: Literal["sale", "rent"] = "sale",
     seller_type: Optional[Literal["owner", "agent", "unknown"]] = None,  # «без агентов» = owner
@@ -92,6 +94,23 @@ def get_listings(
         # колонке эквивалентен прежнему "item.market and discount >= min";
         # SQL `>=` уже отсекает NULL.
         conditions.append(Listing.discount_percent >= discount_min)
+    if q:
+        # «содержит»: слова разделяем пробелом/запятой; каждое слово должно
+        # встретиться в заголовке ИЛИ описании; нужны ВСЕ слова (И).
+        for word in q.replace(",", " ").split():
+            like = f"%{word}%"
+            conditions.append(or_(Listing.title.ilike(like), Listing.description.ilike(like)))
+    if exclude:
+        # «исключить»: выкидываем, если ЛЮБОЕ слово есть в заголовке/описании.
+        # description nullable → NULL трактуем как «слова нет».
+        for word in exclude.replace(",", " ").split():
+            like = f"%{word}%"
+            conditions.append(
+                and_(
+                    ~Listing.title.ilike(like),
+                    or_(Listing.description.is_(None), ~Listing.description.ilike(like)),
+                )
+            )
 
     # Сортировка и пагинация — на стороне БД (раньше тянули ВСЕ подходящие
     # строки в Python и резали там). discount_percent/price*/seen_at —

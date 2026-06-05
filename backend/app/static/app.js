@@ -10,6 +10,8 @@ const defaultFilters = {
   floor_min: "",
   floor_max: "",
   discount_min: "",
+  q: "",
+  exclude: "",
   source: "",
   sort: "discount",
 };
