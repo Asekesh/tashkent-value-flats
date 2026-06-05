@@ -41,8 +41,10 @@ def fmt_num(value: float | None) -> str:
 
 
 def base_conditions(settings: Settings) -> list:
+    # SEO-лендинги — только продажа. Аренда получит свои хабы/sitemap отдельно.
     return [
         Listing.status == "active",
+        Listing.deal_type == "sale",
         Listing.price_usd >= settings.min_listing_price_usd,
         Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
     ]

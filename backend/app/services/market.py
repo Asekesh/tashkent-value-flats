@@ -92,6 +92,7 @@ def build_market_index(db: Session) -> MarketIndex:
             Listing.total_floors,
         ).where(
             Listing.status == "active",
+            Listing.deal_type == "sale",  # глобальный индекс — только продажа (аренда считается отдельно)
             Listing.price_usd >= settings.min_listing_price_usd,
             Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
         )

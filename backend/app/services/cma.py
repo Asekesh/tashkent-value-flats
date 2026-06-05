@@ -111,8 +111,18 @@ def build_cma(db: Session, listing: Listing) -> CmaResult:
     subject_year = extract_year(listing.title, listing.description)
     subject_extreme = is_extreme_floor(listing.floor, listing.total_floors)
 
+    # Аренду сравниваем только с арендой, продажу — с продажей; внутри аренды
+    # месяц с месяцем, сутки с сутками (цена/м² различается в разы). У продажи
+    # price_period = NULL → IS NULL (SQL NULL=NULL не даёт true), поэтому отдельно.
+    period_filter = (
+        Listing.price_period.is_(None)
+        if listing.price_period is None
+        else Listing.price_period == listing.price_period
+    )
     base_filters = (
         Listing.status == "active",
+        Listing.deal_type == listing.deal_type,
+        period_filter,
         Listing.price_usd >= settings.min_listing_price_usd,
         Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
         Listing.rooms == listing.rooms,

@@ -42,6 +42,7 @@ def get_listings(
     floor_max: Optional[int] = None,
     discount_min: Optional[float] = None,
     source: Optional[str] = None,
+    deal_type: Literal["sale", "rent"] = "sale",
     sort: Literal["discount", "price_per_m2", "fresh", "price"] = "discount",
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -51,6 +52,7 @@ def get_listings(
     # подсчёта total, и для самой страницы.
     conditions = [
         Listing.status == "active",
+        Listing.deal_type == deal_type,  # вкладка: продажа/аренда, дефолт sale (старый фронт)
         Listing.price_usd >= settings.min_listing_price_usd,
         Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
     ]
@@ -109,7 +111,10 @@ def get_listings(
 
 
 @router.get("/listings/stats")
-def get_listings_stats(db: Session = Depends(get_db)) -> dict:
+def get_listings_stats(
+    db: Session = Depends(get_db),
+    deal_type: Literal["sale", "rent"] = "sale",
+) -> dict:
     settings = get_settings()
     rows = db.execute(
         select(
@@ -119,6 +124,7 @@ def get_listings_stats(db: Session = Depends(get_db)) -> dict:
             Listing.discount_percent,
         ).where(
             Listing.status == "active",
+            Listing.deal_type == deal_type,
             Listing.price_usd >= settings.min_listing_price_usd,
             Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
         )
