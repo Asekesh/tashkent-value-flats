@@ -1196,6 +1196,12 @@ label,
   gap: var(--sp-3);
 }
 
+.field-hint {
+  color: var(--color-text-subtle);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+}
+
 input,
 select {
   background: var(--color-bg);

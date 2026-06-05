@@ -41,7 +41,7 @@ def get_listings(
     floor_min: Optional[int] = None,
     floor_max: Optional[int] = None,
     discount_min: Optional[float] = None,
-    q: Optional[str] = None,  # «содержит»: слова в заголовке+описании, нужны ВСЕ
+    q: Optional[str] = None,  # «содержит»: слова в заголовке/описании/адресе, нужны ВСЕ
     exclude: Optional[str] = None,  # «исключить»: выкинуть, если есть ЛЮБОЕ слово
     source: Optional[str] = None,
     deal_type: Literal["sale", "rent"] = "sale",
@@ -96,18 +96,25 @@ def get_listings(
         conditions.append(Listing.discount_percent >= discount_min)
     if q:
         # «содержит»: слова разделяем пробелом/запятой; каждое слово должно
-        # встретиться в заголовке ИЛИ описании; нужны ВСЕ слова (И).
+        # встретиться в заголовке, описании ИЛИ адресе; нужны ВСЕ слова (И).
         for word in q.replace(",", " ").split():
             like = f"%{word}%"
-            conditions.append(or_(Listing.title.ilike(like), Listing.description.ilike(like)))
+            conditions.append(
+                or_(
+                    Listing.title.ilike(like),
+                    Listing.description.ilike(like),
+                    Listing.address_raw.ilike(like),
+                )
+            )
     if exclude:
-        # «исключить»: выкидываем, если ЛЮБОЕ слово есть в заголовке/описании.
+        # «исключить»: выкидываем, если ЛЮБОЕ слово есть в заголовке/описании/адресе.
         # description nullable → NULL трактуем как «слова нет».
         for word in exclude.replace(",", " ").split():
             like = f"%{word}%"
             conditions.append(
                 and_(
                     ~Listing.title.ilike(like),
+                    ~Listing.address_raw.ilike(like),
                     or_(Listing.description.is_(None), ~Listing.description.ilike(like)),
                 )
             )
