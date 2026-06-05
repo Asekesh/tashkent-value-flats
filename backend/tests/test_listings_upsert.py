@@ -29,6 +29,43 @@ def _raw_olx_card(*, price: float, title: str = "NRG Meros") -> RawListing:
     )
 
 
+def test_rent_does_not_merge_into_sale_with_colliding_fingerprint(db_session):
+    # Дешёвая продажа ($5000) и дорогая помесячная аренда ($4400) того же
+    # дома/комнат/площади бакетятся в один duplicate_group_key (price_bucket=5000).
+    # До deal_type-скоупа дедупа аренда матчилась как дубль продажи и (будучи
+    # «дешевле») перезаписывала её — продажа молча превращалась в аренду.
+    common = dict(
+        source="uybor",
+        url="u",
+        area_m2=50,
+        rooms=2,
+        district="Юнусабадский район",
+        address_raw="ЖК X",
+        floor=5,
+        total_floors=9,
+    )
+    sale, sale_new = upsert_raw_listing(
+        db_session,
+        RawListing(source_id="SALE1", title="2-комн", price=5000, currency="USD", deal_type="sale", **common),
+    )
+    rent, rent_new = upsert_raw_listing(
+        db_session,
+        RawListing(
+            source_id="RENT1", title="2-комн аренда", price=4400, currency="USD",
+            deal_type="rent", price_period="month", **common,
+        ),
+    )
+    db_session.commit()
+
+    assert sale_new and rent_new
+    rows = db_session.scalars(select(Listing).where(Listing.source == "uybor")).all()
+    assert len(rows) == 2  # не схлопнулись в одну
+    sale_row = next(r for r in rows if r.source_id == "SALE1")
+    rent_row = next(r for r in rows if r.source_id == "RENT1")
+    assert sale_row.deal_type == "sale" and sale_row.price_usd == 5000  # продажа не перезаписана
+    assert rent_row.deal_type == "rent" and rent_row.price_period == "month"
+
+
 def test_olx_search_refresh_preserves_detail_verified_usd_price(db_session):
     listing, is_new = upsert_raw_listing(db_session, _raw_olx_card(price=1_016_000_000))
     assert is_new is True

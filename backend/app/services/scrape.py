@@ -67,7 +67,11 @@ def run_scrape_for_source(db: Session, source: str, mode: str = "auto", trigger:
                 settings=settings,
             )
         else:
-            raw_listings = parse_fixture(source)
+            # Fixture-режим — только для sale: rent-фикстур нет, rent-адаптер
+            # унаследовал бы sale-фикстуру (olx.html/uybor.html) и, матчась по
+            # (source, source_id), перезаписал бы sale-строки как rent. Прод —
+            # live-режим; fixture только dev/CI.
+            raw_listings = parse_fixture(source) if adapter.deal_type == "sale" else []
             new_count = 0
             updated_count = 0
             for raw in raw_listings:
@@ -83,7 +87,9 @@ def run_scrape_for_source(db: Session, source: str, mode: str = "auto", trigger:
         run.updated_count = updated_count
         if use_live and mode in {"full", "live"}:
             mark_delisted_for_source(db, adapter.source, deal_type=adapter.deal_type)
-            if adapter.source == "olx":
+            # Свип запускаем только из sale-джоба: он и так покрывает ВСЕ source=='olx'
+            # строки (включая аренду), поэтому второй запуск из olx_rent — лишний.
+            if adapter.source == "olx" and adapter.deal_type == "sale":
                 # OLX hides archived ads from search immediately; the 3-day
                 # delist heuristic above is too slow, so probe detail pages.
                 db.commit()

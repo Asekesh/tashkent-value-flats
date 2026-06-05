@@ -38,6 +38,7 @@ def merge_existing_duplicates(db: Session, dry_run: bool = False) -> dict:
     exact_groups: dict[tuple, list[Listing]] = defaultdict(list)
     for listing in rows:
         key = (
+            listing.deal_type,  # аренду и продажу не кластеризуем вместе (source общий)
             listing.source,
             listing.district,
             listing.rooms,
@@ -66,6 +67,7 @@ def merge_existing_duplicates(db: Session, dry_run: bool = False) -> dict:
         if listing.area_m2 is None or listing.rooms is None:
             continue
         key = (
+            listing.deal_type,  # см. Pass 1: аренда и продажа — разные кластеры
             listing.source,
             listing.district,
             listing.rooms,

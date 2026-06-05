@@ -72,7 +72,7 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
     building_key = normalize_building_key(raw.district, raw.address_raw)
     group_key = duplicate_group_key(raw.district, raw.address_raw, raw.rooms, raw.area_m2, price_usd)
 
-    duplicate = find_duplicate(db, group_key, raw.source, raw.source_id)
+    duplicate = find_duplicate(db, group_key, raw.source, raw.source_id, raw.deal_type)
     if duplicate is None:
         duplicate = find_duplicate_by_flat(db, raw, price_usd)
     source_urls = [{"source": raw.source, "url": raw.url}]
@@ -218,10 +218,14 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
     return listing, is_new
 
 
-def find_duplicate(db: Session, group_key: str, source: str, source_id: str) -> Listing | None:
+def find_duplicate(db: Session, group_key: str, source: str, source_id: str, deal_type: str = "sale") -> Listing | None:
+    # deal_type-скоуп обязателен: source у аренды и продажи общий ('uybor'/'olx'),
+    # а price_bucket в group_key может совпасть (дешёвая продажа vs дорогая аренда).
+    # Без него rent-строка матчилась бы как дубль sale и перезаписывала её.
     return db.scalar(
         select(Listing).where(
             Listing.duplicate_group_key == group_key,
+            Listing.deal_type == deal_type,
             or_(Listing.source != source, Listing.source_id != source_id),
         )
     )
@@ -255,6 +259,7 @@ def find_duplicate_by_flat(db: Session, raw: RawListing, price_usd: float) -> Li
     return db.scalar(
         select(Listing).where(
             Listing.source == raw.source,
+            Listing.deal_type == raw.deal_type,  # не схлопывать аренду с продажей (source общий)
             Listing.district == raw.district,
             Listing.rooms == raw.rooms,
             Listing.area_m2 == raw.area_m2,
