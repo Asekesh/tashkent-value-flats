@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -51,3 +51,29 @@ class Listing(Base):
     market_calculated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # --- Раздел «Аренда». Для продажи deal_type='sale' (дефолт), остальное NULL,
+    #     поэтому существующие строки и старый парсер продажи не затрагиваются.
+    #     seller_type НЕ дублируем — колонка уже объявлена выше. ---
+    deal_type: Mapped[str] = mapped_column(String(16), default="sale", server_default="sale", index=True)
+    price_period: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # 'month' | 'day'; NULL для продажи
+    is_furnished: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # фильтр аренды; NULL = неизвестно
+    commission_pct: Mapped[Optional[float]] = mapped_column(Numeric(5, 2), nullable=True)  # NULL=неизвестно, 0=без комиссии
+    residential_complex_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("residential_complex.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    deposit: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)  # опционально
+    utilities_included: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # опционально
+
+
+class ResidentialComplex(Base):
+    """Справочник ЖК. Парсер апсертит по match_key (нормализованный ключ), чтобы
+    варианты написания одного ЖК схлопывались в одну строку, а не плодили дубли."""
+
+    __tablename__ = "residential_complex"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255))  # каноничное имя для показа
+    match_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)  # ключ склейки
+    district: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
