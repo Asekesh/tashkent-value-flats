@@ -29,6 +29,7 @@ const state = {
   dashboardSource: "",
   cmaResult: null,
   cmaSort: { key: null, dir: 1 },
+  cmaCache: {},
 };
 
 const filterIds = Object.keys(defaultFilters);
@@ -472,7 +473,79 @@ function renderInsight() {
       <dt>Источник</dt><dd>${escapeHtml(sourceLabel(listing.source))}</dd>
     </dl>
     <a class="btn btn-secondary btn-block" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">Источник</a>
+    <div id="cheaperSimilar" class="cheaper-similar"><p class="muted-text">${icon("chart")} Ищем похожие дешевле…</p></div>
   `;
+  renderCheaperSimilar(listing);
+}
+
+// Призыв к подписке в момент интереса — показывается в правом блоке под
+// «похожими дешевле». Кнопка ведёт к Telegram-входу в шапке.
+function tgCtaHtml() {
+  return `
+    <div class="insight-tg-cta">
+      <span>${icon("telegram")} Ловить такие первыми?</span>
+      <button class="btn btn-primary btn-block" data-tg-cta type="button">Вход через Telegram</button>
+    </div>
+  `;
+}
+
+function scrollToAuth() {
+  const box = document.querySelector("#authBox");
+  const target = box && box.children.length ? box : document.querySelector(".tg-cta");
+  if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// «Похожие дешевле» — переиспользует движок аналогов (/api/cma). Из всех
+// аналогов берём только те, что дешевле выбранной по $/м², показываем топ-4
+// с выгодой. Если дешевле нет — это позитивный сигнал «лучшая цена».
+async function renderCheaperSimilar(listing) {
+  const id = listing.id;
+  let result = state.cmaCache[id];
+  if (result === undefined) {
+    try {
+      const response = await fetch(`/api/cma/${id}`);
+      if (!response.ok) throw new Error("cma_failed");
+      result = await response.json();
+    } catch {
+      result = null;
+    }
+    state.cmaCache[id] = result; // кешируем и неудачу, чтобы не дёргать API повторно
+  }
+  // Гонка: пока шёл запрос, пользователь мог выбрать другую карточку.
+  if (state.selectedId !== id) return;
+  const mount = insightPanel.querySelector("#cheaperSimilar");
+  if (!mount) return;
+
+  const base = listing.price_per_m2_usd || 0;
+  const cheaper = (result?.analogs || [])
+    .filter((a) => a.price_per_m2_usd && base && a.price_per_m2_usd < base)
+    .sort((a, b) => a.price_per_m2_usd - b.price_per_m2_usd)
+    .slice(0, 4);
+
+  let html = `<div class="section-title">${icon("sparkle")} <span>Похожие дешевле</span></div>`;
+  if (cheaper.length) {
+    html += cheaper
+      .map((a) => {
+        const saveAbs = Math.max(0, Math.round(listing.price_usd - a.price_usd));
+        const savePct = base ? Math.round((1 - a.price_per_m2_usd / base) * 100) : 0;
+        return `
+          <a class="cheaper-row" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer noopener">
+            <span class="cheaper-main"><strong>$${money(a.price_usd)}</strong><small>${a.area_m2} м² · $${money(a.price_per_m2_usd)}/м²</small></span>
+            <span class="cheaper-save">−$${money(saveAbs)} · −${savePct}%</span>
+          </a>`;
+      })
+      .join("");
+    html += `<button class="btn btn-ghost btn-block" data-cma="${id}" type="button">${icon("chart")} Показать все похожие</button>`;
+  } else {
+    html += `<p class="best-price">${icon("sparkle")} Дешевле похожих сейчас нет — это лучшая цена в своей группе.</p>`;
+  }
+  html += tgCtaHtml();
+  mount.innerHTML = html;
+
+  const allBtn = mount.querySelector("[data-cma]");
+  if (allBtn) allBtn.addEventListener("click", () => openCma(id));
+  const tgBtn = mount.querySelector("[data-tg-cta]");
+  if (tgBtn) tgBtn.addEventListener("click", scrollToAuth);
 }
 
 function renderRuns() {

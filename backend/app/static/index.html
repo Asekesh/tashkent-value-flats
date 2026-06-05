@@ -54,7 +54,7 @@
     </script>
 
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260601-feedback" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260605-cheaper" />
     <!-- Yandex.Metrika counter -->
     <script type="text/javascript">
       (function(m,e,t,r,i,k,a){
@@ -183,22 +183,25 @@
             </button>
           </section>
 
+          <section class="room-filters" aria-label="Фильтр по комнатам">
+            <button data-quick-rooms="1" type="button">1-комн.</button>
+            <button data-quick-rooms="2" type="button">2-комн.</button>
+            <button data-quick-rooms="3" type="button">3-комн.</button>
+            <button data-quick-rooms="4" type="button">4-комн.</button>
+          </section>
+
           <section class="quick-filters">
+            <span>Быстрый срез</span>
+            <button data-quick-discount type="button">скидка 15%+</button>
+            <button data-quick-ppm type="button">минимум $/м²</button>
+          </section>
+
+          <section class="quick-filters quick-filters-sub">
             <span>Площадка</span>
             <button class="source-pill active" data-source-pill="" type="button">Все источники</button>
             <button class="source-pill" data-source-pill="olx" type="button">OLX <small data-source-count="olx">0</small></button>
             <button class="source-pill" data-source-pill="uybor" type="button">Uybor <small data-source-count="uybor">0</small></button>
             <button class="source-pill" data-source-pill="realt24" type="button">Realt24 <small data-source-count="realt24">0</small></button>
-          </section>
-
-          <section class="quick-filters">
-            <span>Быстрый срез</span>
-            <button data-quick-rooms="1" type="button">1-комн.</button>
-            <button data-quick-rooms="2" type="button">2-комн.</button>
-            <button data-quick-rooms="3" type="button">3-комн.</button>
-            <button data-quick-rooms="4" type="button">4-комн.</button>
-            <button data-quick-discount type="button">скидка 15%+</button>
-            <button data-quick-ppm type="button">минимум $/м²</button>
           </section>
 
           <section class="content-grid">
@@ -353,7 +356,7 @@
       </div>
     </main>
     <button id="scrollTopButton" class="scroll-top" type="button" aria-label="Наверх" hidden><svg class="ic"><use href="#i-arrow-up"/></svg></button>
-    <script src="/static/app.js?v=20260601-feedback"></script>
+    <script src="/static/app.js?v=20260605-cheaper"></script>
     <script src="/static/service-features.js?v=20260528-cma-sort2"></script>
     <script src="/static/reg-gate.js?v=20260528-mobile3"></script>
     <script src="/static/onboarding.js?v=20260528-mobile3"></script>

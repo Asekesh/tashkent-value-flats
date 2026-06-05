@@ -818,6 +818,57 @@ button:disabled {
   margin-right: var(--sp-1);
 }
 
+/* Фильтр по комнатам — главный клик по карте кликов, поэтому крупный и сверху. */
+.room-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+.room-filters button {
+  background: rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  color: var(--color-text);
+  cursor: pointer;
+  flex: 1 1 auto;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-extra);
+  min-height: 52px;
+  min-width: 96px;
+  padding: 0 var(--sp-6);
+  transition: background var(--transition), border-color var(--transition),
+              box-shadow var(--transition), transform var(--transition);
+}
+.room-filters button:hover {
+  background: var(--color-bg);
+  border-color: var(--color-primary-border);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+.room-filters button:focus-visible {
+  box-shadow: var(--shadow-sm), var(--ring-primary);
+  outline: none;
+}
+.room-filters button:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* Источники кликают редко — даём вторичный, приглушённый вес. */
+.quick-filters-sub {
+  margin-bottom: var(--sp-7);
+  opacity: 0.9;
+}
+.quick-filters-sub span {
+  font-size: var(--fs-xs);
+}
+.quick-filters-sub .source-pill {
+  font-size: var(--fs-xs);
+}
+
 .content-grid {
   align-items: start;
   display: grid;
@@ -1031,6 +1082,94 @@ dt {
 dd {
   font-weight: var(--fw-bold);
   margin: 0;
+}
+
+/* «Похожие дешевле» — оживляет правый блок: аналоги ниже по $/м² с выгодой. */
+.cheaper-similar {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-6);
+}
+.cheaper-similar .section-title {
+  margin-bottom: var(--sp-4);
+}
+.cheaper-row {
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: var(--sp-4);
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  text-decoration: none;
+  transition: border-color var(--transition), box-shadow var(--transition),
+              transform var(--transition);
+}
+.cheaper-row:hover {
+  border-color: var(--color-primary-border);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+.cheaper-row:focus-visible {
+  box-shadow: var(--shadow-sm), var(--ring-primary);
+  outline: none;
+}
+.cheaper-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.cheaper-main strong {
+  color: var(--color-text);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-extra);
+}
+.cheaper-main small {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+.cheaper-save {
+  color: var(--color-success-strong);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-extra);
+  white-space: nowrap;
+}
+.best-price {
+  align-items: flex-start;
+  color: var(--color-success-strong);
+  display: flex;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  gap: var(--sp-3);
+  line-height: var(--lh-normal);
+}
+.best-price .ic {
+  color: var(--color-success);
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+/* Контекстный призыв к подписке — в момент интереса к конкретной квартире. */
+.insight-tg-cta {
+  border-top: 1px solid var(--color-border);
+  display: grid;
+  gap: var(--sp-4);
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-6);
+}
+.insight-tg-cta span {
+  align-items: center;
+  color: var(--color-text-body);
+  display: inline-flex;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  gap: var(--sp-3);
+}
+.insight-tg-cta .ic {
+  color: var(--color-primary);
 }
 
 /* .primary-link -> .btn .btn-secondary .btn-block (see app.js).
