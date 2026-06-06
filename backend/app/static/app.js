@@ -13,6 +13,7 @@ const defaultFilters = {
   q: "",
   exclude: "",
   source: "",
+  seller_type: "",
   sort: "discount",
 };
 
@@ -68,6 +69,7 @@ document.querySelector("#fullScanButton").addEventListener("click", () => runScr
 document.querySelector("#stopScanButton").addEventListener("click", stopScrape);
 document.querySelector("#applyButton").addEventListener("click", () => fetchListings(readFilters(), 0));
 document.querySelector("#resetButton").addEventListener("click", resetFilters);
+document.querySelector("#seller_type").addEventListener("change", () => fetchListings(readFilters(), 0));
 document.querySelector("#refreshRunsButton").addEventListener("click", fetchTasks);
 document.querySelector("#refreshSourcePagesButton").addEventListener("click", fetchSourceStats);
 document.querySelector("#feedbackNav").addEventListener("click", showFeedbackModal);
@@ -1342,7 +1344,11 @@ function toggleFavorite(id) {
 }
 
 function readFilters() {
-  return Object.fromEntries(filterIds.map((id) => [id, document.querySelector(`#${id}`).value]));
+  return Object.fromEntries(filterIds.map((id) => {
+    // Тумблер «Только собственники» — чекбокс: вкл → seller_type=owner, выкл → пусто.
+    if (id === "seller_type") return [id, document.querySelector("#seller_type").checked ? "owner" : ""];
+    return [id, document.querySelector(`#${id}`).value];
+  }));
 }
 
 function writeFilters(filters) {
@@ -1350,6 +1356,8 @@ function writeFilters(filters) {
     const value = filters[id] ?? "";
     if (id === "district") {
       districtMulti.setValue(value);
+    } else if (id === "seller_type") {
+      document.querySelector("#seller_type").checked = value === "owner";
     } else {
       document.querySelector(`#${id}`).value = value;
     }
