@@ -25,7 +25,8 @@ class RawListing:
     published_at: datetime | None = None
     deal_type: str = "sale"          # "sale" | "rent"
     price_period: str | None = None  # "month" | "day"; только для аренды
-    seller_id: str | None = None     # id продавца у площадки (Uybor userId) — для детекции агентов
+    seller_id: str | None = None     # id продавца у площадки (Uybor userId, OLX user.id) — для детекции агентов
+    is_business: bool | None = None  # площадка сама помечает бизнес-аккаунт (OLX isBusiness) → агент; None=неизвестно
 
 
 @dataclass

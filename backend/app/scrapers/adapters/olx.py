@@ -94,6 +94,7 @@ class OlxAdapter(SourceAdapter):
         soup = BeautifulSoup(html, "html.parser")
         photo_map = _extract_prerendered_photos(html)
         param_map = _extract_prerendered_params(html)
+        seller_map = _extract_prerendered_sellers(html)
         listings: list[RawListing] = []
         seen: set[str] = set()
         for offer in _extract_jsonld_offers(soup):
@@ -117,6 +118,17 @@ class OlxAdapter(SourceAdapter):
                 raw.photos = photo_map.get(raw.source_id) or photo_map.get(
                     _source_id_from_url(raw.url)
                 ) or []
+            # Продавец: user.id как seller_id (классификатор по объёму, как у Uybor)
+            # + isBusiness (площадка сама пометила агентство). JSON-LD/карточки
+            # этих полей не несут — берём из __PRERENDERED_STATE__.
+            seller = seller_map.get(raw.source_id) or seller_map.get(
+                _source_id_from_url(raw.url)
+            )
+            if seller:
+                if raw.seller_id is None:
+                    raw.seller_id = seller.get("seller_id")
+                if seller.get("is_business") is not None:
+                    raw.is_business = seller["is_business"]
         return listings
 
     def probe_listing(self, url: str, client: httpx.Client) -> ListingProbe:
@@ -257,6 +269,40 @@ def _extract_prerendered_params(html: str) -> dict[str, dict]:
         if url:
             param_map[_source_id_from_url(url)] = info
     return param_map
+
+
+def _extract_prerendered_sellers(html: str) -> dict[str, dict]:
+    """Продавец каждого объявления из embedded-state: ``user.id`` (id аккаунта,
+    аналог Uybor userId) и ``isBusiness`` (площадка сама помечает бизнес-аккаунт).
+
+    JSON-LD карточек этих полей не содержит, поэтому без блоба продавца OLX не
+    определить. Ключуем по id и по url-коду — как photo_map/param_map.
+    """
+    data = _load_prerendered_state(html)
+    if data is None:
+        return {}
+    ads = data.get("listing", {}).get("listing", {}).get("ads")
+    if not isinstance(ads, list):
+        return {}
+    seller_map: dict[str, dict] = {}
+    for ad in ads:
+        if not isinstance(ad, dict):
+            continue
+        user = ad.get("user")
+        uid = user.get("id") if isinstance(user, dict) else None
+        is_business = ad.get("isBusiness")
+        info = {
+            "seller_id": str(uid) if uid not in (None, "") else None,
+            "is_business": is_business if isinstance(is_business, bool) else None,
+        }
+        if info["seller_id"] is None and info["is_business"] is None:
+            continue
+        if ad.get("id") is not None:
+            seller_map[str(ad["id"])] = info
+        url = compact_text(ad.get("url"))
+        if url:
+            seller_map[_source_id_from_url(url)] = info
+    return seller_map
 
 
 def _flatten_params(params) -> dict[str, str]:

@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import timedelta
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Listing, ListingEvent
+from app.models import Listing, ListingEvent, ResidentialComplex
 from app.scrapers.base import RawListing
 from app.services.normalization import (
+    complex_match_key,
     duplicate_group_key,
     dumps_json,
+    extract_complex_name,
     loads_json,
     normalize_building_key,
     price_per_m2,
@@ -192,6 +195,10 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         if raw.seller_type is not None:
             listing.seller_type = raw.seller_type
         listing.seller_id = raw.seller_id
+        # is_business даёт только OLX из embedded-state; reprobe/детальный проход
+        # его не несут — не затираем уже известный флаг None'ом.
+        if raw.is_business is not None:
+            listing.is_business = raw.is_business
         listing.deal_type = raw.deal_type
         listing.price_period = raw.price_period
         listing.published_at = raw.published_at
@@ -202,6 +209,13 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         listing.floor = raw.floor
     if listing.total_floors is None and raw.total_floors is not None:
         listing.total_floors = raw.total_floors
+    # ЖК (Шаг 3e): имя сидит в тексте, тянем источник-агностично из адреса+описания.
+    # Не затираем уже проставленный id None'ом из не-дешевле дубля без названия.
+    complex_name = extract_complex_name(f"{raw.address_raw or ''} {raw.description or ''}")
+    if complex_name:
+        rc_id = resolve_residential_complex(db, complex_name, listing.district)
+        if rc_id and (overwrite_canonical or listing.residential_complex_id is None):
+            listing.residential_complex_id = rc_id
     listing.seen_at = now
     listing.status = "active"
     listing.source_urls = dumps_json(merge_source_urls(loads_json(listing.source_urls, []), source_urls))
@@ -272,6 +286,45 @@ def find_duplicate_by_flat(db: Session, raw: RawListing, price_usd: float) -> Li
             or_(Listing.source != raw.source, Listing.source_id != raw.source_id),
         )
     )
+
+
+def resolve_residential_complex(db: Session, name: str, district: str | None) -> int | None:
+    """Апсерт ЖК по match_key: разные написания одного ЖК схлопываются в одну
+    строку справочника. Возвращает id или None, если имя «пустое»."""
+    key = complex_match_key(name)
+    if len(key) < 2:
+        return None
+    existing = db.scalar(select(ResidentialComplex).where(ResidentialComplex.match_key == key))
+    if existing:
+        return existing.id
+    complex_row = ResidentialComplex(name=name, match_key=key, district=district)
+    try:
+        # savepoint: гонка на unique(match_key) не должна валить весь upsert.
+        with db.begin_nested():
+            db.add(complex_row)
+        return complex_row.id
+    except IntegrityError:
+        return db.scalar(select(ResidentialComplex.id).where(ResidentialComplex.match_key == key))
+
+
+def backfill_residential_complexes(db: Session, dry_run: bool = False) -> dict:
+    """Разовый проход по листингам без residential_complex_id — тянет ЖК из
+    текста и проставляет FK. Новые скрейпы заполняют поле сами в upsert."""
+    rows = list(db.scalars(select(Listing).where(Listing.residential_complex_id.is_(None))).all())
+    updated = 0
+    for listing in rows:
+        name = extract_complex_name(f"{listing.address_raw or ''} {listing.description or ''}")
+        if not name:
+            continue
+        rc_id = resolve_residential_complex(db, name, listing.district)
+        if rc_id is None:
+            continue
+        if not dry_run:
+            listing.residential_complex_id = rc_id
+        updated += 1
+    if not dry_run:
+        db.commit()
+    return {"scanned": len(rows), "updated": updated, "dry_run": dry_run}
 
 
 def merge_source_urls(existing: list[dict], incoming: list[dict]) -> list[dict]:

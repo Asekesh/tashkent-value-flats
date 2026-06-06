@@ -5,8 +5,13 @@
 Принцип «на OWNER консервативно»: owner ставим только при ровно 1 активном
 объявлении продавца; 2 — `unknown` (мог быть и мелкий хозяин, и агент); ≥3 — agent.
 
-Работает только по строкам с непустым seller_id (сейчас Uybor userId). OLX/realt24
-(seller_id=NULL) не трогаем — для них seller_type определяется иначе/позже (3c-2).
+Дополнительный сигнал: если площадка САМА пометила аккаунт бизнес-аккаунтом
+(`is_business`, OLX isBusiness) — это agent независимо от объёма (ловит агентств
+с 1-2 объявлениями, которых счёт записал бы в owner).
+
+Работает по строкам с непустым seller_id: Uybor userId и OLX user.id (3c-2 —
+вытащили из embedded-state). realt24 (seller_id=NULL) не трогаем — у него id
+продавца в выдаче нет.
 """
 from __future__ import annotations
 
@@ -21,16 +26,29 @@ AGENT_LISTING_THRESHOLD = 3
 
 def classify_sellers_by_volume(db: Session) -> dict[str, int]:
     """Проставляет seller_type ('agent'|'owner'|'unknown') по числу активных
-    объявлений продавца. Возвращает счётчик ПРОДАВЦОВ по категориям."""
+    объявлений продавца (+ бизнес-флаг площадки). Возвращает счётчик ПРОДАВЦОВ."""
     counts = db.execute(
         select(Listing.source, Listing.seller_id, func.count())
         .where(Listing.status == "active", Listing.seller_id.is_not(None))
         .group_by(Listing.source, Listing.seller_id)
     ).all()
+    # Продавцы, помеченные площадкой как бизнес — agent независимо от объёма.
+    business = {
+        tuple(row)
+        for row in db.execute(
+            select(Listing.source, Listing.seller_id)
+            .where(
+                Listing.status == "active",
+                Listing.seller_id.is_not(None),
+                Listing.is_business.is_(True),
+            )
+            .distinct()
+        ).all()
+    }
 
     stats = {"agent": 0, "owner": 0, "unknown": 0}
     for source, seller_id, n in counts:
-        if n >= AGENT_LISTING_THRESHOLD:
+        if (source, seller_id) in business or n >= AGENT_LISTING_THRESHOLD:
             label = "agent"
         elif n == 1:
             label = "owner"

@@ -32,7 +32,8 @@ class Listing(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     photos: Mapped[str] = mapped_column(Text, default="[]")
     seller_type: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
-    seller_id: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)  # id продавца у площадки (Uybor userId)
+    seller_id: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)  # id продавца у площадки (Uybor userId, OLX user.id)
+    is_business: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # площадка пометила бизнес-аккаунт (OLX isBusiness) → агент; NULL=неизвестно
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     status: Mapped[str] = mapped_column(String(30), default="active", index=True)
