@@ -52,15 +52,18 @@ def test_match_key_collapses_spellings():
     assert complex_match_key("Паркент Плаза") == complex_match_key("паркент   плаза")
 
 
-def _raw(*, source_id: str, address: str, description: str = "", deal_type: str = "sale") -> RawListing:
+def _raw(
+    *, source_id: str, address: str, description: str = "", deal_type: str = "sale",
+    price: float = 60000, area_m2: float = 55,
+) -> RawListing:
     return RawListing(
         source="uybor",
         source_id=source_id,
         url=f"https://uybor.test/{source_id}",
         title="2-комн",
-        price=60000,
+        price=price,
         currency="USD",
-        area_m2=55,
+        area_m2=area_m2,
         rooms=2,
         district="Мирабадский район",
         address_raw=address,
@@ -111,3 +114,23 @@ def test_backfill_residential_complexes(db_session):
     assert result["updated"] == 1
     db_session.refresh(listing)
     assert listing.residential_complex_id is not None
+
+
+def test_backfill_limit_chunks(db_session):
+    # Три объявления разных ЖК без FK; limit=2 обрабатывает их по чанкам.
+    for i, jk in enumerate(["Alpha", "Beta", "Gamma"]):
+        # разные цена/площадь, чтобы find_duplicate_by_flat не схлопнул их в одно
+        l, _ = upsert_raw_listing(
+            db_session,
+            _raw(source_id=f"L{i}", address=f"ЖК {jk}", price=60000 + i * 20000, area_m2=55 + i * 15),
+        )
+        l.residential_complex_id = None
+    db_session.commit()
+
+    first = backfill_residential_complexes(db_session, limit=2)
+    assert first["scanned"] == 2 and first["updated"] == 2
+    second = backfill_residential_complexes(db_session, limit=2)
+    assert second["scanned"] == 1 and second["updated"] == 1
+    # справочник склеил три РАЗНЫХ ЖК в три строки, дублей нет
+    assert db_session.scalar(select(func.count()).select_from(ResidentialComplex)) == 3
+    assert backfill_residential_complexes(db_session, dry_run=True)["updated"] == 0

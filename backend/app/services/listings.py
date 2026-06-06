@@ -288,39 +288,70 @@ def find_duplicate_by_flat(db: Session, raw: RawListing, price_usd: float) -> Li
     )
 
 
-def resolve_residential_complex(db: Session, name: str, district: str | None) -> int | None:
+def resolve_residential_complex(
+    db: Session, name: str, district: str | None, cache: dict[str, int] | None = None
+) -> int | None:
     """Апсерт ЖК по match_key: разные написания одного ЖК схлопываются в одну
-    строку справочника. Возвращает id или None, если имя «пустое»."""
+    строку справочника. Возвращает id или None, если имя «пустое». ``cache``
+    (match_key→id) избавляет бэкфилл от per-row SELECT по сети."""
     key = complex_match_key(name)
     if len(key) < 2:
         return None
+    if cache is not None and key in cache:
+        return cache[key]
     existing = db.scalar(select(ResidentialComplex).where(ResidentialComplex.match_key == key))
     if existing:
+        if cache is not None:
+            cache[key] = existing.id
         return existing.id
     complex_row = ResidentialComplex(name=name, match_key=key, district=district)
     try:
-        # savepoint: гонка на unique(match_key) не должна валить весь upsert.
+        # savepoint: гонка на unique(match_key) (живой скрейпер пишет параллельно)
+        # не должна валить весь upsert/бэкфилл.
         with db.begin_nested():
             db.add(complex_row)
-        return complex_row.id
+        rc_id = complex_row.id
     except IntegrityError:
-        return db.scalar(select(ResidentialComplex.id).where(ResidentialComplex.match_key == key))
+        rc_id = db.scalar(select(ResidentialComplex.id).where(ResidentialComplex.match_key == key))
+    if cache is not None and rc_id is not None:
+        cache[key] = rc_id
+    return rc_id
 
 
-def backfill_residential_complexes(db: Session, dry_run: bool = False) -> dict:
+def backfill_residential_complexes(
+    db: Session, dry_run: bool = False, limit: int | None = None
+) -> dict:
     """Разовый проход по листингам без residential_complex_id — тянет ЖК из
-    текста и проставляет FK. Новые скрейпы заполняют поле сами в upsert."""
-    rows = list(db.scalars(select(Listing).where(Listing.residential_complex_id.is_(None))).all())
+    текста и проставляет FK. Новые скрейпы заполняют поле сами в upsert.
+
+    Эффективность: справочник ЖК предзагружается в память один раз, поэтому в
+    цикле нет per-row SELECT — иначе 31k строк не укладываются в таймаут шлюза.
+    ``limit`` режет проход на чанки (вызывать повторно, пока updated>0)."""
+    stmt = select(Listing).where(Listing.residential_complex_id.is_(None)).order_by(Listing.id)
+    if limit:
+        stmt = stmt.limit(limit)
+    rows = list(db.scalars(stmt).all())
+    cache: dict[str, int] = {
+        rc.match_key: rc.id for rc in db.scalars(select(ResidentialComplex)).all()
+    }
+    pending_keys: set[str] = set()  # для dry_run: новые ЖК, которые создались бы
     updated = 0
     for listing in rows:
         name = extract_complex_name(f"{listing.address_raw or ''} {listing.description or ''}")
         if not name:
             continue
-        rc_id = resolve_residential_complex(db, name, listing.district)
+        key = complex_match_key(name)
+        if len(key) < 2:
+            continue
+        if dry_run:
+            if key not in cache:
+                pending_keys.add(key)
+            updated += 1
+            continue
+        rc_id = resolve_residential_complex(db, name, listing.district, cache=cache)
         if rc_id is None:
             continue
-        if not dry_run:
-            listing.residential_complex_id = rc_id
+        listing.residential_complex_id = rc_id
         updated += 1
     if not dry_run:
         db.commit()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
@@ -96,8 +98,8 @@ def merge_duplicate_listings(dry_run: bool = False, db: Session = Depends(get_db
 
 
 @router.post("/complex/backfill")
-def backfill_complexes(dry_run: bool = False, db: Session = Depends(get_db)) -> dict:
-    return backfill_residential_complexes(db, dry_run=dry_run)
+def backfill_complexes(dry_run: bool = False, limit: Optional[int] = None, db: Session = Depends(get_db)) -> dict:
+    return backfill_residential_complexes(db, dry_run=dry_run, limit=limit)
 
 
 @router.post("/sweep/listing/{listing_id}")
