@@ -147,6 +147,73 @@ def duplicate_group_key(district: str, address: str, rooms: int, area_m2: float,
     return hashlib.sha1(basis.encode("utf-8")).hexdigest()
 
 
+# --- ЖК-нормализатор (Шаг 3e) ---------------------------------------------
+# Имя ЖК у источников почти не приходит структурно (Uybor отдаёт только
+# residentialComplexId без имени, заполнен он у ~2% объявлений), зато сплошь
+# и рядом сидит в тексте адреса/описания: «ЖК Nest One», «жилой комплекс
+# Паркент Плаза», «в ЖК OzMakon». Поэтому тянем имя из текста, а склейку
+# разных написаний («Mirabad Avenue / Мирабад Авеню / mirabad avenue») делаем
+# через транслитерированный match_key.
+
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    # узбекская кириллица
+    "ў": "o", "қ": "q", "ғ": "g", "ҳ": "h",
+}
+
+# Хвостовые «адресные» токены, которые жадный захват имени мог прихватить
+# после настоящего названия («ЖК IMPERIAL Club City Адрес : ...»).
+_COMPLEX_STOPWORDS = {
+    "адрес", "район", "ориентир", "метро", "дом", "улица", "проспект",
+    "массив", "квартал", "новостройка", "кв", "near", "возле", "рядом",
+    "продается", "продаётся", "сдается", "сдаётся", "этаж", "мкр", "мфй",
+    # «ЖК» внутри имени = склейка двух упоминаний («Мирабад Авеню ЖК Mirabad»);
+    # «от/на» и «застрой(щик)» — хвост вроде «OzMakon от Golden House».
+    "жк", "от", "на", "в", "застрой", "застройщик", "residential", "complex",
+}
+
+# keyword (без регистра, не часть другого слова) + опц. кавычки/тире +
+# имя: первый токен с буквы, до 3 продолжений с заглавной/цифры.
+_COMPLEX_RE = re.compile(
+    r"(?i:(?<![A-Za-zА-Яа-яЁё0-9])(?:жк|ж/к|ж\.\s?к|жилой\s+комплекс|residential\s+complex))"
+    r"[\s:«»\"'`\-–—]*"
+    r"([A-Za-zА-ЯЁ][\w&.\-]*(?:\s+[A-Za-zА-Яа-яЁё][\w&.\-]*){0,3})"
+)
+
+
+def transliterate(text: str) -> str:
+    return "".join(_TRANSLIT.get(ch, ch) for ch in text.lower())
+
+
+def complex_match_key(name: str) -> str:
+    """Ключ склейки ЖК: транслит кириллицы в латиницу, только [a-z0-9].
+    «Nest One» / «нест ван»? нет — но «Mirabad Avenue» == «mirabad avenue»."""
+    return re.sub(r"[^a-z0-9]+", "", transliterate(name or ""))
+
+
+def extract_complex_name(text: str | None) -> str | None:
+    """Достаёт каноничное имя ЖК из свободного текста или None."""
+    if not text:
+        return None
+    match = _COMPLEX_RE.search(text)
+    if not match:
+        return None
+    tokens = match.group(1).split()
+    kept: list[str] = []
+    for token in tokens:
+        if token.lower().strip(".") in _COMPLEX_STOPWORDS:
+            break
+        kept.append(token)
+    name = compact_text(" ".join(kept))
+    if len(complex_match_key(name)) < 2:
+        return None
+    return name
+
+
 def dumps_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 

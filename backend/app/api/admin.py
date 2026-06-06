@@ -9,6 +9,7 @@ from app.models import ScrapeRun, ScrapeTask
 from app.schemas.listing import ScrapeRunOut, ScrapeRunRequest, ScrapeSourceOut, ScrapeTaskOut
 from app.services import archive_sweep, photo_backfill, scrape_progress
 from app.services.dedup import merge_existing_duplicates
+from app.services.listings import backfill_residential_complexes
 from app.services.scrape import get_source_page_stats, start_scrape_in_background
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -92,6 +93,11 @@ def stop_olx_archive_sweep() -> dict:
 @router.post("/dedup/merge")
 def merge_duplicate_listings(dry_run: bool = False, db: Session = Depends(get_db)) -> dict:
     return merge_existing_duplicates(db, dry_run=dry_run)
+
+
+@router.post("/complex/backfill")
+def backfill_complexes(dry_run: bool = False, db: Session = Depends(get_db)) -> dict:
+    return backfill_residential_complexes(db, dry_run=dry_run)
 
 
 @router.post("/sweep/listing/{listing_id}")
