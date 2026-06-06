@@ -116,21 +116,26 @@ def test_backfill_residential_complexes(db_session):
     assert listing.residential_complex_id is not None
 
 
-def test_backfill_limit_chunks(db_session):
-    # Три объявления разных ЖК без FK; limit=2 обрабатывает их по чанкам.
-    for i, jk in enumerate(["Alpha", "Beta", "Gamma"]):
-        # разные цена/площадь, чтобы find_duplicate_by_flat не схлопнул их в одно
-        l, _ = upsert_raw_listing(
-            db_session,
-            _raw(source_id=f"L{i}", address=f"ЖК {jk}", price=60000 + i * 20000, area_m2=55 + i * 15),
-        )
+def test_backfill_cursor_pagination_skips_non_complex(db_session):
+    # Два объявления с ЖК + одно без. Курсорная пагинация (after_id) НЕ должна
+    # зацикливаться на «без ЖК» (оно остаётся с NULL-FK).
+    specs = [("ЖК Alpha", 60000, 55), ("ул. Пушкина 5", 70000, 70), ("ЖК Gamma", 80000, 85)]
+    for i, (addr, price, area) in enumerate(specs):
+        l, _ = upsert_raw_listing(db_session, _raw(source_id=f"P{i}", address=addr, price=price, area_m2=area))
         l.residential_complex_id = None
     db_session.commit()
 
-    first = backfill_residential_complexes(db_session, limit=2)
-    assert first["scanned"] == 2 and first["updated"] == 2
-    second = backfill_residential_complexes(db_session, limit=2)
-    assert second["scanned"] == 1 and second["updated"] == 1
-    # справочник склеил три РАЗНЫХ ЖК в три строки, дублей нет
-    assert db_session.scalar(select(func.count()).select_from(ResidentialComplex)) == 3
-    assert backfill_residential_complexes(db_session, dry_run=True)["updated"] == 0
+    cursor, total_scanned, total_updated, rounds = 0, 0, 0, 0
+    while True:
+        rounds += 1
+        assert rounds < 10  # защита от зацикливания
+        r = backfill_residential_complexes(db_session, limit=1, after_id=cursor)
+        total_scanned += r["scanned"]
+        total_updated += r["updated"]
+        if r["scanned"] == 0:
+            break
+        cursor = r["next_after_id"]
+
+    assert total_scanned == 3  # каждая строка просмотрена ровно раз
+    assert total_updated == 2  # FK проставлен только двум с ЖК
+    assert db_session.scalar(select(func.count()).select_from(ResidentialComplex)) == 2

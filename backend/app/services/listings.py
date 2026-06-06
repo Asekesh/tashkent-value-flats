@@ -319,15 +319,23 @@ def resolve_residential_complex(
 
 
 def backfill_residential_complexes(
-    db: Session, dry_run: bool = False, limit: int | None = None
+    db: Session, dry_run: bool = False, limit: int | None = None, after_id: int = 0
 ) -> dict:
     """Разовый проход по листингам без residential_complex_id — тянет ЖК из
     текста и проставляет FK. Новые скрейпы заполняют поле сами в upsert.
 
-    Эффективность: справочник ЖК предзагружается в память один раз, поэтому в
-    цикле нет per-row SELECT — иначе 31k строк не укладываются в таймаут шлюза.
-    ``limit`` режет проход на чанки (вызывать повторно, пока updated>0)."""
-    stmt = select(Listing).where(Listing.residential_complex_id.is_(None)).order_by(Listing.id)
+    Эффективность: справочник ЖК предзагружается в память один раз, в цикле нет
+    per-row SELECT — иначе 31k строк не укладываются в таймаут шлюза.
+
+    Пагинация КУРСОРОМ по ``after_id`` (не offset): строки без ЖК остаются с
+    NULL-FK, поэтому limit+order_by всегда возвращал бы ту же «голову» и
+    зацикливался. Клиент идёт чанками: after_id = ответный ``next_after_id``,
+    пока ``scanned`` > 0."""
+    stmt = (
+        select(Listing)
+        .where(Listing.residential_complex_id.is_(None), Listing.id > after_id)
+        .order_by(Listing.id)
+    )
     if limit:
         stmt = stmt.limit(limit)
     rows = list(db.scalars(stmt).all())
@@ -355,7 +363,12 @@ def backfill_residential_complexes(
         updated += 1
     if not dry_run:
         db.commit()
-    return {"scanned": len(rows), "updated": updated, "dry_run": dry_run}
+    return {
+        "scanned": len(rows),
+        "updated": updated,
+        "dry_run": dry_run,
+        "next_after_id": rows[-1].id if rows else after_id,
+    }
 
 
 def merge_source_urls(existing: list[dict], incoming: list[dict]) -> list[dict]:

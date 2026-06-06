@@ -98,8 +98,10 @@ def merge_duplicate_listings(dry_run: bool = False, db: Session = Depends(get_db
 
 
 @router.post("/complex/backfill")
-def backfill_complexes(dry_run: bool = False, limit: Optional[int] = None, db: Session = Depends(get_db)) -> dict:
-    return backfill_residential_complexes(db, dry_run=dry_run, limit=limit)
+def backfill_complexes(
+    dry_run: bool = False, limit: Optional[int] = None, after_id: int = 0, db: Session = Depends(get_db)
+) -> dict:
+    return backfill_residential_complexes(db, dry_run=dry_run, limit=limit, after_id=after_id)
 
 
 @router.post("/sweep/listing/{listing_id}")
