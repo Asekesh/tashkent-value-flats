@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models import ScrapeRun, ScrapeTask
 from app.schemas.listing import ScrapeRunOut, ScrapeRunRequest, ScrapeSourceOut, ScrapeTaskOut
-from app.services import archive_sweep, photo_backfill, scrape_progress
+from app.services import archive_sweep, market_recompute, photo_backfill, scrape_progress
 from app.services.dedup import merge_existing_duplicates
 from app.services.listings import backfill_residential_complexes, remerge_residential_complexes
 from app.services.scrape import get_source_page_stats, start_scrape_in_background
@@ -109,6 +109,22 @@ def remerge_complexes(dry_run: bool = False, db: Session = Depends(get_db)) -> d
     """Схлопывает дубли ЖК под обновлённый нормализатор. Запускать один раз
     после деплоя. dry_run=true — только посчитать, без изменений."""
     return remerge_residential_complexes(db, dry_run=dry_run)
+
+
+@router.post("/market/recompute")
+def recompute_market() -> dict:
+    """Полный серверный пересчёт кэш-оценок рынка (market_price/discount/
+    is_below_market) для всех активных листингов, в фоне. Дёргать вручную
+    после изменения логики CMA — чтобы не ждать недельного rebuild."""
+    started = market_recompute.start_market_recompute_in_background()
+    if not started:
+        return {"started": False, "reason": "already_running", "progress": market_recompute.get_state()}
+    return {"started": True, "progress": market_recompute.get_state()}
+
+
+@router.get("/market/recompute/progress")
+def get_market_recompute_progress() -> dict:
+    return market_recompute.get_state()
 
 
 @router.post("/sweep/listing/{listing_id}")
