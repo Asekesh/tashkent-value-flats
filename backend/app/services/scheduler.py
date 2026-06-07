@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models import Listing, ScrapeTask
 from app.services import archive_sweep, scrape_progress
+from app.services.listings import remerge_residential_complexes
 from app.services.market_estimate import recompute_all as recompute_market_estimates
 from app.services.scrape import expand_with_rent, resolve_live_sources, run_scrape_for_source
 from app.services.seller_classifier import classify_sellers_by_volume
@@ -153,6 +154,33 @@ def _rebuild_market_estimates() -> None:
         try:
             recompute_market_estimates(db)
         except Exception:  # pragma: no cover — не валим scheduler из-за rebuild
+            pass
+
+
+async def scheduled_complex_remerge_loop() -> None:
+    """Периодическая уборка справочника ЖК: схлопывает дубли-стражглеры, что
+    медленно копятся от непойманных шум-слов в новых объявлениях (новые скрейпы
+    ключуются правильно, но «Nest One стильная» и т.п. плодят 1-листинговые строки).
+
+    Стартовый прогон (через complex_remerge_startup_delay_seconds после старта) +
+    далее раз в complex_remerge_interval_hours. Стартовый нужен, потому что голый
+    sleep-таймер сбрасывается на каждом деплое — без него на частых деплоях
+    недельный таймер почти никогда бы не срабатывал. На чистом справочнике прогон
+    дёшев и не пишет (см. remerge_residential_complexes — идемпотентна)."""
+    settings = get_settings()
+    interval_seconds = max(3600, settings.complex_remerge_interval_hours * 3600)
+    await asyncio.sleep(max(0, settings.complex_remerge_startup_delay_seconds))
+    await asyncio.to_thread(_run_complex_remerge)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        await asyncio.to_thread(_run_complex_remerge)
+
+
+def _run_complex_remerge() -> None:
+    with SessionLocal() as db:
+        try:
+            remerge_residential_complexes(db)
+        except Exception:  # pragma: no cover — не валим scheduler из-за уборки
             pass
 
 

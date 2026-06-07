@@ -26,6 +26,7 @@ from app.scrapers.registry import ADAPTERS, parse_fixture
 from app.services.listings import upsert_raw_listing
 from app.services.normalization import normalize_district
 from app.services.scheduler import (
+    scheduled_complex_remerge_loop,
     scheduled_market_rebuild_loop,
     scheduled_olx_startup_sweep,
     scheduled_scrape_loop,
@@ -163,6 +164,10 @@ async def lifespan(_: FastAPI):
     market_rebuild_task: asyncio.Task | None = asyncio.create_task(
         scheduled_market_rebuild_loop()
     )
+    # Уборка справочника ЖК — независима от скрейпа, дёшева, идемпотентна.
+    complex_remerge_task: asyncio.Task | None = asyncio.create_task(
+        scheduled_complex_remerge_loop()
+    )
     bot_task: asyncio.Task | None = None
     notifier_task: asyncio.Task | None = None
     if settings.telegram_bot_token:
@@ -172,6 +177,7 @@ async def lifespan(_: FastAPI):
     await stop_scheduler(scheduler_task)
     await stop_scheduler(olx_sweep_task)
     await stop_scheduler(market_rebuild_task)
+    await stop_scheduler(complex_remerge_task)
     await stop_scheduler(notifier_task)
     await stop_bot(bot_task)
 

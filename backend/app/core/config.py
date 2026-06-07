@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     # (quick-скан их не трогает). 0 в интервале = только разовый проход.
     olx_sweep_startup_delay_seconds: int = 120
     olx_sweep_interval_hours: int = 12
+    # Ремердж справочника ЖК (схлопывание дублей под нормализатор). Новые скрейпы
+    # уже кладут правильный ключ, но непойманные шум-слова медленно плодят
+    # 1-листинговые строки-стражглеры — этот проход их вычищает. Дёшев (на чистом
+    # справочнике — sub-second no-op без записей) и идемпотентен. Стартовый прогон
+    # нужен, т.к. голый sleep-таймер сбрасывается на каждом деплое (частом тут).
+    complex_remerge_startup_delay_seconds: int = 300
+    complex_remerge_interval_hours: int = 168  # 1 неделя
 
     # --- Auth (Telegram login + JWT session) ---
     telegram_bot_token: str = ""
