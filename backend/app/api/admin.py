@@ -11,7 +11,7 @@ from app.models import ScrapeRun, ScrapeTask
 from app.schemas.listing import ScrapeRunOut, ScrapeRunRequest, ScrapeSourceOut, ScrapeTaskOut
 from app.services import archive_sweep, photo_backfill, scrape_progress
 from app.services.dedup import merge_existing_duplicates
-from app.services.listings import backfill_residential_complexes
+from app.services.listings import backfill_residential_complexes, remerge_residential_complexes
 from app.services.scrape import get_source_page_stats, start_scrape_in_background
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -102,6 +102,13 @@ def backfill_complexes(
     dry_run: bool = False, limit: Optional[int] = None, after_id: int = 0, db: Session = Depends(get_db)
 ) -> dict:
     return backfill_residential_complexes(db, dry_run=dry_run, limit=limit, after_id=after_id)
+
+
+@router.post("/complex/remerge")
+def remerge_complexes(dry_run: bool = False, db: Session = Depends(get_db)) -> dict:
+    """Схлопывает дубли ЖК под обновлённый нормализатор. Запускать один раз
+    после деплоя. dry_run=true — только посчитать, без изменений."""
+    return remerge_residential_complexes(db, dry_run=dry_run)
 
 
 @router.post("/sweep/listing/{listing_id}")

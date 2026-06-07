@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Listing, ListingEvent, ResidentialComplex
 from app.scrapers.base import RawListing
 from app.services.normalization import (
+    clean_complex_name,
     complex_match_key,
     duplicate_group_key,
     dumps_json,
@@ -384,6 +386,111 @@ def backfill_residential_complexes(
         "updated": updated,
         "dry_run": dry_run,
         "next_after_id": rows[-1].id if rows else after_id,
+    }
+
+
+def remerge_residential_complexes(db: Session, dry_run: bool = False) -> dict:
+    """Пересобирает справочник ЖК под ОБНОВЛЁННЫЙ complex_match_key: разные
+    написания одного ЖК («Nest One»/«Nest One вид»/«Акай Сити»/«Akay City»)
+    схлопывает в одну строку. Для каждого нового ключа канон = строка с
+    наибольшим числом активных листингов; листинги остальных строк группы
+    переносятся на канон, дубли удаляются, канону проставляется новый ключ и
+    чистое имя. Сироты (имя выродилось в чистый шум → ключ < 2) — отвязываем и
+    удаляем, иначе агрегат «по ЖК» получил бы мусорный ЖК. Идемпотентна.
+
+    Запускать ОДИН раз после деплоя нового нормализатора (новые скрейпы уже
+    кладутся правильным ключом). Строк в справочнике немного (~3k) → один
+    проход/транзакция, без курсора."""
+    counts: dict[int, int] = dict(
+        db.execute(
+            select(Listing.residential_complex_id, func.count())
+            .where(Listing.residential_complex_id.is_not(None), Listing.status == "active")
+            .group_by(Listing.residential_complex_id)
+        ).all()
+    )
+    rows = list(db.scalars(select(ResidentialComplex)).all())
+    groups: dict[str, list[ResidentialComplex]] = defaultdict(list)
+    orphans: list[ResidentialComplex] = []
+    for rc in rows:
+        key = complex_match_key(rc.name)
+        if len(key) < 2:
+            orphans.append(rc)
+        else:
+            groups[key].append(rc)
+
+    plan = []  # (canonical, others, new_key, new_name)
+    for key, grp in groups.items():
+        canonical = max(grp, key=lambda rc: (counts.get(rc.id, 0), -rc.id))
+        others = [rc for rc in grp if rc.id != canonical.id]
+        new_name = clean_complex_name(canonical.name) or canonical.name
+        plan.append((canonical, others, key, new_name))
+
+    merge_groups = sum(1 for _, others, _, _ in plan if others)
+    rows_deleted = sum(len(others) for _, others, _, _ in plan)
+    listings_repointed = sum(counts.get(rc.id, 0) for _, others, _, _ in plan for rc in others)
+    rows_rekeyed = sum(
+        1 for c, _, k, n in plan if c.match_key != k or c.name != n
+    )
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "complexes_before": len(rows),
+            "merge_groups": merge_groups,
+            "rows_deleted": rows_deleted,
+            "listings_repointed": listings_repointed,
+            "rows_rekeyed": rows_rekeyed,
+            "orphans_dropped": len(orphans),
+            "complexes_after": len(rows) - rows_deleted - len(orphans),
+        }
+
+    # Пас 1: перенос листингов + удаление дублей и сирот. Делаем ДО смены ключей
+    # канонов (пас 2), чтобы исключить даже теоретический транзиентный конфликт
+    # на unique(match_key). rowcount считаем фактический (включая removed-листинги,
+    # которые тоже должны переехать на канон) — отчёт точный, не оценка по active.
+    repointed_actual = 0
+    for canonical, others, _, _ in plan:
+        if not others:
+            continue
+        other_ids = [rc.id for rc in others]
+        res = db.execute(
+            update(Listing)
+            .where(Listing.residential_complex_id.in_(other_ids))
+            .values(residential_complex_id=canonical.id)
+        )
+        repointed_actual += res.rowcount or 0
+        db.flush()
+        for rc in others:
+            db.delete(rc)
+        db.flush()
+    orphan_listings_nulled = 0
+    for rc in orphans:
+        res = db.execute(
+            update(Listing).where(Listing.residential_complex_id == rc.id).values(residential_complex_id=None)
+        )
+        orphan_listings_nulled += res.rowcount or 0
+        db.delete(rc)
+    db.flush()
+    listings_repointed = repointed_actual  # перекрываем active-оценку фактическим rowcount
+
+    # Пас 2: канону — новый ключ и чистое имя. Все дубли уже удалены → коллизий нет.
+    for canonical, _, key, new_name in plan:
+        if canonical.match_key != key:
+            canonical.match_key = key
+        if canonical.name != new_name:
+            canonical.name = new_name
+    db.commit()
+
+    return {
+        "dry_run": False,
+        "complexes_before": len(rows),
+        "merge_groups": merge_groups,
+        "rows_deleted": rows_deleted,
+        "listings_repointed": listings_repointed,
+        "rows_rekeyed": rows_rekeyed,
+        "orphans_dropped": len(orphans),
+        "orphan_listings_nulled": orphan_listings_nulled,
+        "complexes_after": len(rows) - rows_deleted - len(orphans),
     }
 
 

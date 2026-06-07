@@ -165,49 +165,155 @@ _TRANSLIT = {
     "ў": "o", "қ": "q", "ғ": "g", "ҳ": "h",
 }
 
-# Хвостовые «адресные» токены, которые жадный захват имени мог прихватить
-# после настоящего названия («ЖК IMPERIAL Club City Адрес : ...»).
-_COMPLEX_STOPWORDS = {
-    "адрес", "район", "ориентир", "метро", "дом", "улица", "проспект",
-    "массив", "квартал", "новостройка", "кв", "near", "возле", "рядом",
-    "продается", "продаётся", "сдается", "сдаётся", "этаж", "мкр", "мфй",
-    # «ЖК» внутри имени = склейка двух упоминаний («Мирабад Авеню ЖК Mirabad»);
-    # «от/на» и «застрой(щик)» — хвост вроде «OzMakon от Golden House».
-    "жк", "от", "на", "в", "застрой", "застройщик", "residential", "complex",
+# Листинговый/маркетинговый шум, который засоряет имя ЖК в адресе+описании
+# («ЖК Nest One вид», «Mirabad Avenue Мирабадский ID Срочно»). Выкидываем его из
+# ключа склейки, НО НЕ трогаем бренд-слова (avenue/plaza/tower/city/house/
+# residence/club/gardens) — иначе «Parkent Plaza» и «Parkent Avenue» схлопнулись
+# бы в один ЖК. Формы — транслитерированные (см. transliterate). Подобрано по
+# реальным 2073 ЖК прода (топ-вокабуляр хвостов).
+_COMPLEX_NOISE = {
+    "zhk", "zhiloy", "kompleks", "residential", "complex", "id", "adres",
+    "srochno", "srochnaya", "srochnuyu", "gorod", "goroda", "menyaetsya", "vash",
+    "uvazhaemye", "gosti", "kvartira", "kvartiry", "kvartir", "kvartiru",
+    "arenda", "arendu", "arenduyu", "arendoy", "prodam", "prodayu", "prodazha",
+    "prodaetsya", "sdaetsya", "sdam", "sdayu", "evro", "evroremont", "evrolyuks",
+    "remont", "remontom", "novaya", "novyy", "novoe", "novostroyka", "vid",
+    "vidom", "korobka", "penthaus", "studiya", "studiyu", "komnata", "komnat",
+    "komnaty", "komnatu", "ploshchad", "etazh", "dom", "doma", "ulitsa", "ul",
+    "prospekt", "massiv", "kvartal", "mkr", "mfy", "orientir", "ryadom", "vozle",
+    "near", "metro", "elitnyy", "elitnaya", "elitnom", "shikarnaya", "idealno",
+    "idealnaya", "polnostyu", "dlya", "vse", "vsemi", "eksklyuziv", "tsentr",
+    "vpervye", "predlagaetsya", "toropites", "zhivite", "neboskreb", "teplaya",
+    "chistaya", "avtorskiy", "avtorskim", "kirpich", "kirpichnyy", "dvor",
+    "gotovye", "gotovaya", "predlozhenie", "unikalnoe", "unikalnaya",
+    "sovremennyy", "potryasayushchiy", "prosto", "samaya", "pervaya", "liniya",
+    "sostoyanie", "harakteristiki", "osnovnye", "posrednikov", "bez",
+    "nahoditsya", "lyuks", "pod", "mebel", "tehnika", "sistema", "umnyy",
+    "dolgosrochnaya", "posutochnaya", "apartment", "for", "sale", "rent",
+    "urgent", "ot", "na", "zastroy", "zastroyshchik",
+    "blok", "block", "bloka", "korpus", "korpusa", "blic", "blok",
+}
+# Район-токены (целые слова) и хвост «-ский/-ская» — всегда адресный шум.
+_DISTRICT_TOKENS = {"rayon", "rn", "mahalla"}
+_DISTRICT_SUFFIX_RE = re.compile(r"(skiy|skoy|skij|skaya)$")
+
+# EN↔RU фонетический канон заимствований: кириллическое и латинское написание
+# одного ЖК должны дать один ключ («Акай Сити»==«Akay City», «Мирабад Авеню»==
+# «Mirabad Avenue», «Резиденс»==«Residence»). Маппинг узкий и безопасный —
+# только заимствованные хвосты-бренды.
+_PHONETIC_CANON = {
+    "avenyu": "avenue", "aveny": "avenue", "avenu": "avenue",
+    "siti": "city",
+    "rezidens": "residence", "residens": "residence", "rezidence": "residence",
+    "haus": "house", "hause": "house",
+    "klab": "club", "klub": "club",
+    "tauer": "tower", "tawer": "tower",
+    "layf": "life",
+    "bulvar": "boulevard",
+    "viladzh": "village", "vilage": "village", "villadzh": "village",
+    "garden": "gardens",
 }
 
-# keyword (без регистра, не часть другого слова) + опц. кавычки/тире +
-# имя: первый токен с буквы, до 3 продолжений с заглавной/цифры.
+# keyword (без регистра, не часть другого слова) + опц. кавычки/тире + имя:
+# первый токен с буквы, до 5 продолжений (с запасом — лишний адресный/шумовой
+# хвост всё равно срежется в _complex_tokens).
 _COMPLEX_RE = re.compile(
     r"(?i:(?<![A-Za-zА-Яа-яЁё0-9])(?:жк|ж/к|ж\.\s?к|жилой\s+комплекс|residential\s+complex))"
     r"[\s:«»\"'`\-–—]*"
-    r"([A-Za-zА-ЯЁ][\w&.\-]*(?:\s+[A-Za-zА-Яа-яЁё][\w&.\-]*){0,3})"
+    r"([A-Za-zА-ЯЁ][\w&.\-]*(?:\s+[A-Za-zА-Яа-яЁё][\w&.\-]*){0,5})"
 )
+
+_COMPLEX_TOKEN_SPLIT = re.compile(r"[^0-9A-Za-zА-Яа-яЁёЎўҚқҒғҲҳ]+")
 
 
 def transliterate(text: str) -> str:
     return "".join(_TRANSLIT.get(ch, ch) for ch in text.lower())
 
 
+def _is_plain_noise(canon: str) -> bool:
+    """Безусловный шум: листинговые/маркетинговые слова, цифры, одиночные буквы,
+    коды объявлений. Всегда выкидываем И останавливаем на нём захват имени."""
+    if canon in _COMPLEX_NOISE:
+        return True
+    if canon.isdigit() or len(canon) == 1:
+        return True
+    if re.fullmatch(r"u\d?k\d?", canon):  # «У7К4»-коды объявлений
+        return True
+    if re.fullmatch(r"id\d*", canon):
+        return True
+    if re.fullmatch(r"[abr]\d+", canon):  # блок-коды A-3 / R1 / B2
+        return True
+    return False
+
+
+def _is_district_token(canon: str) -> bool:
+    """Район/«-ский». Выкидываем УСЛОВНО — только если в имени есть и бренд-токен
+    (иначе «Новомосковская»/«Паркентский» как имя ЖК выродились бы в пустой ключ)."""
+    return canon in _DISTRICT_TOKENS or bool(_DISTRICT_SUFFIX_RE.search(canon))
+
+
+def _complex_tokens(name: str | None) -> list[tuple[str, str]]:
+    """[(оригинальный токен для показа, канон-токен для ключа)], без шума.
+    Район-токены режем, только если остаётся хотя бы один бренд-токен."""
+    raw_list: list[tuple[str, str, bool]] = []
+    for raw in _COMPLEX_TOKEN_SPLIT.split(name or ""):
+        if not raw:
+            continue
+        canon = re.sub(r"[^a-z0-9]+", "", transliterate(raw))
+        if not canon or _is_plain_noise(canon):
+            continue
+        raw_list.append((raw, canon, _is_district_token(canon)))
+    has_brand = any(not is_dist for _, _, is_dist in raw_list)
+    out: list[tuple[str, str]] = []
+    for raw, canon, is_dist in raw_list:
+        if is_dist and has_brand:
+            continue
+        out.append((raw, _PHONETIC_CANON.get(canon, canon)))
+    return out
+
+
 def complex_match_key(name: str) -> str:
-    """Ключ склейки ЖК: транслит кириллицы в латиницу, только [a-z0-9].
-    «Nest One» / «нест ван»? нет — но «Mirabad Avenue» == «mirabad avenue»."""
-    return re.sub(r"[^a-z0-9]+", "", transliterate(name or ""))
+    """Ключ склейки ЖК: транслит + выкидываем листинговый шум и район-хвосты +
+    EN↔RU канон. «Nest One вид»==«Nest One», «Акай Сити»==«Akay City», но
+    «Parkent Plaza»≠«Parkent Avenue» (бренд-слова сохраняются)."""
+    return "".join(canon for _, canon in _complex_tokens(name))
+
+
+def clean_complex_name(name: str | None) -> str:
+    """Чистое имя ЖК для показа: те же не-шумовые токены в оригинальном
+    написании, максимум 4 (длиннее имён у ЖК практически нет)."""
+    return compact_text(" ".join(raw for raw, _ in _complex_tokens(name)[:4]))
 
 
 def extract_complex_name(text: str | None) -> str | None:
-    """Достаёт каноничное имя ЖК из свободного текста или None."""
+    """Достаёт каноничное имя ЖК из свободного текста или None.
+
+    Берём ВЕДУЩИЙ ран не-шумовых токенов и стоп на первом шумовом — он граница
+    названия: «ЖК Nest One вид на парк» → «Nest One» (не «Nest One Парк»).
+    Этим extract отличается от complex_match_key/clean_complex_name, которые
+    выкидывают шум по всей строке (нужно, чтобы перекючевать УЖЕ сохранённые
+    шумные имена вроде «Nest One вид» при ремердже)."""
     if not text:
         return None
     match = _COMPLEX_RE.search(text)
     if not match:
         return None
-    tokens = match.group(1).split()
-    kept: list[str] = []
-    for token in tokens:
-        if token.lower().strip(".") in _COMPLEX_STOPWORDS:
+    # Берём ведущий ран токенов до первого ПЛОСКОГО шума (он граница названия).
+    # Район-токены не граница — собираем, а лишние срежем по has_brand ниже.
+    collected: list[tuple[str, bool]] = []
+    for raw in _COMPLEX_TOKEN_SPLIT.split(match.group(1)):
+        if not raw:
+            continue
+        canon = re.sub(r"[^a-z0-9]+", "", transliterate(raw))
+        if not canon:
+            continue
+        if _is_plain_noise(canon):
             break
-        kept.append(token)
+        collected.append((raw, _is_district_token(canon)))
+        if len(collected) >= 6:
+            break
+    has_brand = any(not is_dist for _, is_dist in collected)
+    kept = [raw for raw, is_dist in collected if not (is_dist and has_brand)][:4]
     name = compact_text(" ".join(kept))
     if len(complex_match_key(name)) < 2:
         return None
