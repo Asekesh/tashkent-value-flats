@@ -54,7 +54,7 @@
     </script>
 
     <link rel="icon" href="/static/favicon.png?v=20260511-cma2" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260606-owner" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260607-mobile" />
     <!-- Yandex.Metrika counter -->
     <script type="text/javascript">
       (function(m,e,t,r,i,k,a){
@@ -262,6 +262,7 @@
               </div>
               <label>Комнаты<select id="rooms"><option value="">Любая</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5+</option></select></label>
               <label>Источник<select id="source"><option value="">Все</option><option value="olx">OLX</option><option value="uybor">Uybor</option><option value="realt24">Realt24</option></select></label>
+              <label>ЖК<input id="residential_complex" placeholder="напр. Nest One" /><small class="field-hint">поиск по названию жилого комплекса</small></label>
               <label>Сортировка<select id="sort"><option value="discount">По скидке</option><option value="price_per_m2">По цене за м²</option><option value="fresh">По дате</option><option value="price">По цене</option></select></label>
               <div class="range-field"><span>Цена, $</span><div><input id="price_min" placeholder="от" /><input id="price_max" placeholder="до" /></div></div>
               <div class="range-field"><span>Площадь, м²</span><div><input id="area_min" placeholder="от" /><input id="area_max" placeholder="до" /></div></div>
@@ -367,7 +368,7 @@
       </div>
     </main>
     <button id="scrollTopButton" class="scroll-top" type="button" aria-label="Наверх" hidden><svg class="ic"><use href="#i-arrow-up"/></svg></button>
-    <script src="/static/app.js?v=20260605-kwsearch"></script>
+    <script src="/static/app.js?v=20260607-mobile"></script>
     <script src="/static/service-features.js?v=20260528-cma-sort2"></script>
     <script src="/static/reg-gate.js?v=20260528-mobile3"></script>
     <script src="/static/onboarding.js?v=20260528-mobile3"></script>
@@ -392,6 +393,14 @@
         try {
           var me = await fetch("/auth/me", { credentials: "same-origin" }).then(function (r) { return r.json(); });
           if (me && me.authenticated) {
+            // Главный лид: факт авторизации/регистрации через Telegram. Виджет — iframe,
+            // клик не перехватить, поэтому ловим завершённый вход; один раз на браузер.
+            try {
+              if (window.ym && !localStorage.getItem("uyradar:tg_auth_fired")) {
+                ym(109543384, "reachGoal", "tg_auth");
+                localStorage.setItem("uyradar:tg_auth_fired", "1");
+              }
+            } catch (e) { /* приватный режим/без ym — игнор */ }
             if (promo) promo.hidden = true;
             if (favCta) favCta.hidden = true;
             if (me.role === "admin") {
@@ -412,6 +421,10 @@
               "<span>" + name + (me.role === "admin" ? " · админ" : "") + "</span></span>" +
               (botUser ? '<a class="auth-bot" href="https://t.me/' + botUser + '" target="_blank" rel="noopener">Открыть бота</a>' : "") +
               '<a class="auth-logout" href="/auth/logout">Выйти</a>';
+            var botLink = box.querySelector(".auth-bot");
+            if (botLink) botLink.addEventListener("click", function () {
+              try { if (window.ym) ym(109543384, "reachGoal", "tg_open_bot"); } catch (e) {}
+            });
             return;
           }
           var cfg = await fetch("/auth/config").then(function (r) { return r.json(); });
@@ -421,6 +434,8 @@
             return;
           }
           box.appendChild(telegramWidget(cfg.bot_username, "medium"));
+          // Только для неавторизованных: на мобильном CTA закрепляется внизу экрана.
+          if (cta) cta.classList.add("tg-cta--sticky");
           var favBox = document.getElementById("favoritesAuthBox");
           if (favBox) favBox.appendChild(telegramWidget(cfg.bot_username, "large"));
           if (favCta) favCta.hidden = false;

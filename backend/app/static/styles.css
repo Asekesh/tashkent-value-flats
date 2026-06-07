@@ -101,6 +101,7 @@
   --shadow-md:    0 2px 4px rgba(15, 23, 42, 0.04), 0 12px 28px rgba(15, 23, 42, 0.08);
   --shadow-lg:    0 4px 10px rgba(15, 23, 42, 0.08), 0 32px 64px rgba(15, 23, 42, 0.18);
   --shadow-float: 0 6px 18px rgba(37, 99, 235, 0.30), 0 2px 6px rgba(37, 99, 235, 0.18);
+  --shadow-up:    0 -2px 12px rgba(15, 23, 42, 0.12); /* подложка sticky-бара снизу */
   --focus-ring:   0 0 0 4px rgba(37, 99, 235, 0.16);   /* input focus halo */
   --ring-primary: 0 0 0 4px rgba(37, 99, 235, 0.22);   /* button :focus-visible */
 
@@ -1704,6 +1705,39 @@ select:focus {
     justify-content: flex-start;
   }
 
+  /* Главная конверсия всегда под рукой: закрепляем CTA внизу экрана (только для
+     неавторизованных — класс вешает auth-IIFE). */
+  .tg-cta--sticky {
+    border-radius: 0;
+    bottom: 0;
+    box-shadow: var(--shadow-up);
+    justify-content: center;
+    left: 0;
+    position: fixed;
+    right: 0;
+    width: 100%;
+    z-index: 99;
+  }
+
+  .tg-cta--sticky .tg-promo-text {
+    text-align: center;
+  }
+
+  .tg-cta--sticky .tg-promo-text strong {
+    justify-content: center;
+  }
+
+  body:has(.tg-cta--sticky) .page {
+    padding-bottom: 84px;
+  }
+
+  /* backdrop-filter у топбара создаёт containing-block и ломает position:fixed
+     у sticky-CTA — снимаем его, пока бар закреплён внизу (только у анонимов). */
+  body:has(.tg-cta--sticky) .topbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
   .page-heading h2 {
     font-size: var(--fs-xl);
   }
@@ -1720,10 +1754,50 @@ select:focus {
     padding: 18px 14px;
   }
 
-  .stats-grid,
-  .stats-grid.stats-grid-3,
   .filter-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* Компактная шапка: счётчики компактным рядом из трёх (а не три высокие карточки
+     столбиком), фильтры — прокручиваемой строкой. Так первые карточки объявлений
+     видны без долгой прокрутки. */
+  .stats-grid,
+  .stats-grid.stats-grid-3 {
+    gap: var(--sp-3);
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .stats-grid .metric-card {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--sp-2);
+    min-height: 0;
+    padding: var(--sp-4);
+  }
+
+  .stats-grid .metric-card strong {
+    font-size: var(--fs-xl);
+  }
+
+  .stats-grid .metric-icon {
+    display: none;
+  }
+
+  .room-filters,
+  .quick-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .room-filters::-webkit-scrollbar,
+  .quick-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .room-filters button,
+  .quick-filters button {
+    flex: 0 0 auto;
   }
 
   .listing-card {
@@ -1795,12 +1869,23 @@ select:focus {
   }
 
   .quick-filters {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: var(--sp-3);
+    overflow-x: auto;
   }
 
   .filter-actions .btn {
     flex: 1 1 auto;
+  }
+
+  /* Экономим высоту первого экрана: убираем второстепенные подписи. */
+  .stats-grid .metric-card span small {
+    display: none;
+  }
+
+  .quick-filters span,
+  .quick-filters-sub span {
+    display: none;
   }
 }
 
@@ -2063,6 +2148,56 @@ select:focus {
 
 .cma-error {
   color: var(--color-danger);
+}
+
+/* Скелетоны загрузки списка — мерцающие заглушки вместо пустого экрана */
+@keyframes skeleton-shimmer {
+  to { background-position: -200% 0; }
+}
+
+.skel {
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 25%,
+    var(--color-border) 37%,
+    var(--color-surface-2) 63%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-card {
+  cursor: default;
+  pointer-events: none;
+}
+
+.skeleton-card:hover {
+  border-color: var(--color-border);
+  box-shadow: none;
+  transform: none;
+}
+
+.skeleton-card .listing-media.skel {
+  border-radius: 0;
+}
+
+.skeleton-card .listing-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.skel-line { height: 12px; }
+.skel-line.w40 { width: 40%; }
+.skel-line.w60 { width: 60%; }
+.skel-line.w85 { width: 85%; }
+
+.skel-actions {
+  border-radius: var(--radius-md);
+  height: 36px;
+  margin-top: auto;
+  width: 70%;
 }
 
 .cma-body {

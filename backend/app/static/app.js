@@ -13,12 +13,18 @@ const defaultFilters = {
   q: "",
   exclude: "",
   source: "",
+  residential_complex: "",
   seller_type: "",
   sort: "discount",
 };
 
 const PAGE_SIZE = 50;
 const icon = (name, cls) => `<svg class="ic${cls ? " " + cls : ""}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+// Яндекс.Метрика (счётчик 109543384): целевые события. Цели создаются в UI Метрики
+// как «JavaScript-событие» с этими же идентификаторами.
+function goal(id) {
+  try { if (window.ym) ym(109543384, "reachGoal", id); } catch (e) { /* метрика не загрузилась — игнор */ }
+}
 const state = {
   view: "dashboard",
   listings: [],
@@ -72,10 +78,13 @@ document.querySelector("#resetButton").addEventListener("click", resetFilters);
 document.querySelector("#seller_type").addEventListener("change", () => fetchListings(readFilters(), 0));
 document.querySelector("#refreshRunsButton").addEventListener("click", fetchTasks);
 document.querySelector("#refreshSourcePagesButton").addEventListener("click", fetchSourceStats);
-document.querySelector("#feedbackNav").addEventListener("click", showFeedbackModal);
-document.querySelectorAll("[data-open-listings]").forEach((button) => button.addEventListener("click", () => setView("listings")));
+document.querySelector("#feedbackNav").addEventListener("click", () => { goal("feedback_open"); showFeedbackModal(); });
+document.querySelectorAll("[data-open-listings]").forEach((button) => button.addEventListener("click", () => { goal("catalog_open"); setView("listings"); }));
 document.querySelectorAll("[data-view-button]").forEach((button) => {
-  button.addEventListener("click", () => setView(button.dataset.viewButton));
+  button.addEventListener("click", () => {
+    if (button.dataset.viewButton === "listings") goal("catalog_open");
+    setView(button.dataset.viewButton);
+  });
 });
 document.querySelectorAll("[data-quick-rooms]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -292,6 +301,7 @@ function formatDateTime(value) {
 
 async function fetchListings(filters = readFilters(), page = 0) {
   setBusy(true, "Загружаем объявления...");
+  renderSkeletons();
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value) params.set(key, value);
@@ -450,6 +460,26 @@ function renderFavoritesList() {
   bindCards(favoritesListEl);
   const totalEl = document.querySelector("#favoritesTotal");
   if (totalEl) totalEl.textContent = formatNumber(state.favorites.length);
+}
+
+// Скелетоны-заглушки на время загрузки списка — вместо пустого экрана (важно на мобильном,
+// где медленный первый экран даёт «нулевые» сессии). Реальные карточки перетирают их в renderAll().
+function skeletonCards(count) {
+  return Array.from({ length: count }, () => `
+    <article class="listing-card skeleton-card" aria-hidden="true">
+      <div class="listing-media skel"></div>
+      <div class="listing-body">
+        <div class="skel skel-line w40"></div>
+        <div class="skel skel-line w85"></div>
+        <div class="skel skel-line w60"></div>
+        <div class="skel skel-actions"></div>
+      </div>
+    </article>`).join("");
+}
+
+function renderSkeletons() {
+  const target = state.view === "listings" ? listingsList : dashboardList;
+  if (target) target.innerHTML = skeletonCards(6);
 }
 
 function renderFavoritesBadge() {
@@ -741,6 +771,7 @@ function listingCard(listing, rank) {
           <span class="chip">${listing.rooms}-комн.</span>
           <span class="chip muted">Источник: ${escapeHtml(sourceLabel(listing.source))}</span>
           ${listing.seller_type ? `<span class="chip muted">${escapeHtml(sellerLabel(listing.seller_type))}</span>` : ""}
+          ${listing.residential_complex ? `<span class="chip muted">ЖК ${escapeHtml(listing.residential_complex)}</span>` : ""}
         </div>
         <h3>${escapeHtml(listing.title)}</h3>
         <p class="listing-subtitle">${escapeHtml(listing.address_raw || listing.district)}</p>
@@ -784,12 +815,14 @@ function bindCards(root) {
   root.querySelectorAll("[data-cma]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
+      goal("cma_open");
       openCma(Number(button.dataset.cma));
     });
   });
   root.querySelectorAll("[data-history]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
+      goal("history_open");
       openHistory(Number(button.dataset.history));
     });
   });
@@ -938,6 +971,7 @@ async function submitFeedback() {
       body: JSON.stringify({ kind, message }),
     });
     if (!response.ok) throw new Error("failed");
+    goal("feedback_sent");
     statusEl.textContent = "Спасибо! Сообщение отправлено.";
     statusEl.className = "fb-status fb-status-ok";
     overlay.querySelector("#feedbackText").value = "";
@@ -1335,6 +1369,7 @@ function toggleFavorite(id) {
       state.favorites.find((item) => item.id === id);
     if (!listing) return;
     state.favorites = [...state.favorites, listing];
+    goal("fav_add");
   }
   window.localStorage.setItem("tashkent-value-flats:favorites", JSON.stringify(state.favorites));
   renderDashboardList();
