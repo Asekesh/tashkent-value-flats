@@ -756,6 +756,18 @@ function pluralRu(n, forms) {
   return forms[2];
 }
 
+function complexVsText(cm) {
+  // «средняя по ЖК $X/м² · дешевле на Y%» — vs_complex_percent>0 = квартира дешевле
+  // типичной цены ЖК. В UI «средняя» (в коде это медиана, но людям так понятнее).
+  if (!cm) return "";
+  const med = `средняя по ЖК $${money(cm.median_price_per_m2_usd)}/м²`;
+  const v = cm.vs_complex_percent;
+  if (v == null) return med;
+  if (v > 0) return `${med} · дешевле на ${v}%`;
+  if (v < 0) return `${med} · дороже на ${Math.abs(v)}%`;
+  return `${med} · как в ЖК`;
+}
+
 function listingCard(listing, rank) {
   const photo = listing.photos?.[0] ?? "";
   const discount = listing.market?.discount_percent;
@@ -782,7 +794,7 @@ function listingCard(listing, rank) {
           <span>${icon("clock")} ${formatDate(listing.seen_at)}</span>
         </div>
         <div class="listing-bottom">
-          <div><strong>$${money(listing.price_usd)}</strong><span>рынок: ${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}/м²` : "мало данных"}</span></div>
+          <div><strong>$${money(listing.price_usd)}</strong><span>рынок: ${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}/м²` : "мало данных"}</span>${listing.complex_market ? `<span class="complex-vs${listing.complex_market.is_below_complex ? " good" : ""}">${complexVsText(listing.complex_market)}</span>` : ""}</div>
           <div class="row-actions">
             <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">${icon(favorite ? "heart-fill" : "heart")}</button>
             <button class="btn btn-ghost" data-cma="${listing.id}" title="Сравнительный анализ" type="button">${icon("chart")} Найти аналоги</button>

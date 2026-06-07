@@ -15,6 +15,14 @@ class MarketEstimate(BaseModel):
     is_below_market: bool = False
 
 
+class ComplexComparison(BaseModel):
+    name: str
+    count: int
+    median_price_per_m2_usd: float
+    vs_complex_percent: Optional[float] = None  # >0 = дешевле медианы ЖК
+    is_below_complex: bool = False
+
+
 class ListingOut(BaseModel):
     id: int
     source: str
@@ -43,12 +51,29 @@ class ListingOut(BaseModel):
     duplicate_count: int
     source_urls: list[dict[str, str]]
     market: Optional[MarketEstimate] = None
+    complex_market: Optional[ComplexComparison] = None  # сравнение со своим ЖК
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ListingsPage(BaseModel):
     items: list[ListingOut]
+    total: int
+
+
+class ComplexStatOut(BaseModel):
+    id: int
+    name: str
+    district: Optional[str] = None
+    deal_type: str
+    count: int
+    median_price_usd: float
+    median_price_per_m2_usd: float
+    min_price_usd: float
+
+
+class ComplexStatsPage(BaseModel):
+    items: list[ComplexStatOut]
     total: int
 
 

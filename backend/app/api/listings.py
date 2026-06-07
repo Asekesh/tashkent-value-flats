@@ -13,6 +13,9 @@ from app.db.session import get_db
 from app.models import Listing, ListingEvent, ResidentialComplex
 from app.schemas.listing import (
     CmaResultOut,
+    ComplexComparison,
+    ComplexStatOut,
+    ComplexStatsPage,
     ListingEventOut,
     ListingHistoryOut,
     ListingHistorySummary,
@@ -21,6 +24,7 @@ from app.schemas.listing import (
     MarketEstimate,
 )
 from app.services.cma import build_cma
+from app.services.complex_stats import build_comparison, complex_comparison_map, list_complex_stats
 from app.services.listings import listing_to_dict
 from app.services.market import estimate_market
 
@@ -152,7 +156,27 @@ def get_listings(
         .offset(offset)
     ).all()
     items = [_build_item(listing) for listing in rows]
+    _attach_complex_comparison(db, settings, rows, items, deal_type)
     return ListingsPage(items=items, total=total)
+
+
+def _attach_complex_comparison(db, settings, rows, items, deal_type) -> None:
+    """Вешает на каждый листинг сравнение с медианой его ЖК. Батч — один проход
+    по всем ЖК страницы (без N+1). ЖК с <порога листингов пропускаем."""
+    rc_ids = [r.residential_complex_id for r in rows if r.residential_complex_id is not None]
+    comparison = complex_comparison_map(db, settings, rc_ids=rc_ids, deal_type=deal_type)
+    if not comparison:
+        return
+    threshold = settings.below_market_threshold * 100
+    for row, item in zip(rows, items):
+        entry = comparison.get(row.residential_complex_id)
+        if not entry:
+            continue
+        name, count, median_ppm = entry
+        cmp = build_comparison(
+            row.price_per_m2_usd, name, count, median_ppm, below_threshold_percent=threshold
+        )
+        item.complex_market = ComplexComparison(**cmp.__dict__)
 
 
 @router.get("/listings/stats")
@@ -220,6 +244,26 @@ def get_listings_stats(
         "districts": sorted(districts_set),
         "hot_threshold_percent": threshold,
     }
+
+
+@router.get("/complexes", response_model=ComplexStatsPage)
+def get_complexes(
+    db: Session = Depends(get_db),
+    deal_type: Literal["sale", "rent"] = "sale",
+    district: Optional[str] = None,
+    sort: Literal["count", "median_ppm", "median_price"] = "count",
+    limit: int = Query(300, ge=1, le=1000),
+) -> ComplexStatsPage:
+    """Агрегаты по ЖК (медиана цены/$м², число объявлений) — только ЖК с ≥порога
+    листингов, иначе «средняя» это шум."""
+    settings = get_settings()
+    stats = list_complex_stats(db, settings, deal_type=deal_type, district=district, limit=limit)
+    if sort == "median_ppm":
+        stats.sort(key=lambda s: s.median_price_per_m2_usd)
+    elif sort == "median_price":
+        stats.sort(key=lambda s: s.median_price_usd)
+    items = [ComplexStatOut(**s.__dict__) for s in stats]
+    return ComplexStatsPage(items=items, total=len(items))
 
 
 @router.get("/listings/{listing_id}", response_model=ListingOut)
@@ -330,4 +374,6 @@ def _build_item(listing: Listing) -> ListingOut:
 
 
 def _with_market(db: Session, listing: Listing) -> ListingOut:
-    return _build_item(listing)
+    item = _build_item(listing)
+    _attach_complex_comparison(db, get_settings(), [listing], [item], listing.deal_type)
+    return item

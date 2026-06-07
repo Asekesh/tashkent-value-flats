@@ -1047,6 +1047,12 @@ button:disabled {
   margin-top: 3px;
 }
 
+/* Сравнение со своим ЖК: дешевле медианы ЖК — выделяем успехом. */
+.listing-bottom .complex-vs.good {
+  color: var(--color-success);
+  font-weight: var(--fw-semi, 600);
+}
+
 .insight-panel,
 .admin-card {
   padding: var(--sp-7);
