@@ -22,6 +22,9 @@ from app.services.normalization import clean_complex_name, complex_match_key, ex
         ("жилой комплекс Паркент Плаза", "Паркент Плаза"),
         ("жилой комплекс Nest One", "Nest One"),
         ("ЖК «Mirabad Avenue» рядом метро", "Mirabad Avenue"),
+        # Фигурные/«умные» кавычки (частый кейс OLX) — раньше глотали имя.
+        ("Продаётся квартира в ЖК “Maftun Makon” 3 ком.", "Maftun Makon"),
+        ("ж/к ‘Akay City’ срочно", "Akay City"),
         ("ж/к Boulevard, отличная квартира", "Boulevard"),
     ],
 )
