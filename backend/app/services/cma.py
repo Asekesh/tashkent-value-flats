@@ -21,6 +21,11 @@ from app.services.segmentation import classify_segment, is_extreme_floor
 
 AREA_TOLERANCE = 0.15
 MAX_ANALOGS = 20
+# «Тот же ЖК» — верхняя ступень каскада, но только при здоровой выборке: медиана
+# по 1-2 строгим аналогам в ЖК это шум, лучше упасть на дом/район. Чистый
+# residential_complex_id (нормализатор+ремердж) надёжнее текстового building_key/
+# micro_location, поэтому идёт выше них.
+MIN_COMPLEX_ANALOGS = 3
 
 
 @dataclass
@@ -52,7 +57,7 @@ class CmaStats:
 @dataclass
 class CmaResult:
     subject: CmaAnalog
-    basis: str  # "building" | "micro_location" | "district" | "district_relaxed" | "insufficient_data"
+    basis: str  # "complex" | "building" | "micro_location" | "district" | "district_relaxed" | "insufficient_data"
     basis_label: str
     area_tolerance_percent: float
     stats: CmaStats
@@ -93,7 +98,7 @@ def _stats(analogs: list[CmaAnalog]) -> CmaStats:
 
 
 def build_cma(db: Session, listing: Listing) -> CmaResult:
-    """Подбор аналогов с каскадом «дом → массив/ЖК → район».
+    """Подбор аналогов с каскадом «ЖК → дом → массив → район».
 
     Логика: район в Ташкенте идёт «лучами» от центра к краю — Феруза и Ц-1
     формально в одном районе, но это разные рынки. Поэтому строгий матч идёт
@@ -161,7 +166,18 @@ def build_cma(db: Session, listing: Listing) -> CmaResult:
     basis_label = "недостаточно данных для подбора аналогов"
     candidates: list[Listing] = []
 
-    if listing.building_key:
+    # Верхняя ступень: тот же ЖК (чистый residential_complex_id), если строгих
+    # аналогов в нём достаточно. Надёжнее адресного building_key/micro_location.
+    if listing.residential_complex_id is not None:
+        same_complex = [
+            c for c in strict_pool if c.residential_complex_id == listing.residential_complex_id
+        ]
+        if len(same_complex) >= MIN_COMPLEX_ANALOGS:
+            candidates = same_complex
+            basis = "complex"
+            basis_label = f"тот же ЖК, {listing.rooms}-комн., схожие параметры"
+
+    if not candidates and listing.building_key:
         same_building = [c for c in strict_pool if c.building_key == listing.building_key]
         if same_building:
             candidates = same_building

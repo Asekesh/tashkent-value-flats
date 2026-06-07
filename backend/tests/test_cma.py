@@ -48,6 +48,32 @@ def test_cma_uses_building_when_available(db_session):
     assert all(a.id != subject.id for a in result.analogs)
 
 
+def test_cma_prefers_complex_when_enough_analogs(db_session):
+    # ≥ MIN_COMPLEX_ANALOGS строгих аналогов в одном ЖК → базис «complex» (выше дома).
+    # Разные площади/«дом N» → flat-дедуп не схлопнет; общий ЖК через текст адреса.
+    subject = _seed(db_session, "c1", area=50, price=60_000, address="ЖК Alpha, дом 1", floor=4)
+    _seed(db_session, "c2", area=52, price=64_000, address="ЖК Alpha, дом 2", floor=5)
+    _seed(db_session, "c3", area=54, price=70_000, address="ЖК Alpha, дом 3", floor=4)
+    _seed(db_session, "c4", area=56, price=78_000, address="ЖК Alpha, дом 4", floor=5)
+    _seed(db_session, "d1", area=51, price=90_000, address="ЖК Beta, дом 1", floor=4)  # другой ЖК
+    db_session.commit()
+
+    result = build_cma(db_session, subject)
+    assert result.basis == "complex"
+    assert result.stats.count == 3  # c2,c3,c4 (subject исключён, Beta не входит)
+    assert all(a.id != subject.id for a in result.analogs)
+
+
+def test_cma_thin_complex_falls_through(db_session):
+    # < MIN_COMPLEX_ANALOGS в ЖК → не «complex», падаем на дом/район
+    subject = _seed(db_session, "t1", area=50, price=60_000, address="ЖК Gamma, дом 1", floor=4)
+    _seed(db_session, "t2", area=52, price=64_000, address="ЖК Gamma, дом 2", floor=5)
+    db_session.commit()
+
+    result = build_cma(db_session, subject)
+    assert result.basis != "complex"
+
+
 def test_cma_filters_area_within_15_percent(db_session):
     subject = _seed(db_session, "s1", area=100, price=100_000)
     # within ±15%
