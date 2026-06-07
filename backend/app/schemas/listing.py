@@ -35,6 +35,8 @@ class ListingOut(BaseModel):
     description: Optional[str]
     photos: list[str]
     seller_type: Optional[str]
+    residential_complex_id: Optional[int] = None
+    residential_complex: Optional[str] = None
     published_at: Optional[datetime]
     seen_at: datetime
     status: str

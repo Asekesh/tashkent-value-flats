@@ -67,6 +67,12 @@ def _should_preserve_olx_detail_price(listing: Listing, raw: RawListing) -> bool
     return True
 
 
+def _coords_rank(precision: str | None) -> int:
+    """Ранг точности координат: exact (Uybor) > approx (OLX) > нет.
+    Используется в upsert, чтобы approx не затирал exact, а NULL — известную точку."""
+    return {"exact": 2, "approx": 1}.get(precision or "", 0)
+
+
 def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
     db.flush()
     existing = db.scalar(select(Listing).where(Listing.source == raw.source, Listing.source_id == raw.source_id))
@@ -209,6 +215,16 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
         listing.floor = raw.floor
     if listing.total_floors is None and raw.total_floors is not None:
         listing.total_floors = raw.total_floors
+    # Координаты для карты (миграция 0018). Источник-агностично, как floor: льём
+    # из любой строки, что их знает (даже не-дешевле дубля). Но точность ранжируем —
+    # exact (Uybor) бьёт approx (OLX), approx НЕ затирает exact, NULL НЕ затирает
+    # известную точку. Координаты НЕ участвуют в building_key/group_key/дедупе.
+    if raw.lat is not None and raw.lng is not None:
+        existing_rank = _coords_rank(listing.coords_precision) if listing.lat is not None else -1
+        if _coords_rank(raw.coords_precision) >= existing_rank:
+            listing.lat = raw.lat
+            listing.lng = raw.lng
+            listing.coords_precision = raw.coords_precision
     # ЖК (Шаг 3e): имя сидит в тексте, тянем источник-агностично из адреса+описания.
     # Не затираем уже проставленный id None'ом из не-дешевле дубля без названия.
     complex_name = extract_complex_name(f"{raw.address_raw or ''} {raw.description or ''}")
@@ -403,6 +419,8 @@ def listing_to_dict(listing: Listing) -> dict:
         "description": listing.description,
         "photos": loads_json(listing.photos, []),
         "seller_type": listing.seller_type,
+        "residential_complex_id": listing.residential_complex_id,
+        "residential_complex": listing.residential_complex.name if listing.residential_complex else None,
         "published_at": listing.published_at,
         "seen_at": listing.seen_at,
         "status": listing.status,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from types import SimpleNamespace
 
 from sqlalchemy import select
@@ -266,3 +268,49 @@ def test_new_olx_live_scan_uses_detail_price_before_insert(db_session):
     assert listing.price == 85_000
     assert listing.price_usd == 85_000
     assert listing.price_per_m2_usd == 1_700
+
+
+def _geo_raw(*, lat=None, lng=None, precision=None, price=50_000) -> RawListing:
+    return RawListing(
+        source="olx",
+        source_id="GEO1",
+        url="https://www.olx.uz/d/obyavlenie/geo-ID-GEO1.html",
+        title="2-комн",
+        price=price,
+        currency="USD",
+        area_m2=50,
+        rooms=2,
+        district="Мирабадский район",
+        address_raw="ЖК A",
+        lat=lat,
+        lng=lng,
+        coords_precision=precision,
+    )
+
+
+def test_coords_precision_guard(db_session):
+    # 1) approx сохраняется
+    l, _ = upsert_raw_listing(db_session, _geo_raw(lat=41.30, lng=69.25, precision="approx"))
+    db_session.commit()
+    first_id = l.id
+    assert l.coords_precision == "approx"
+    assert l.lat == pytest.approx(41.30) and l.lng == pytest.approx(69.25)
+
+    # 2) exact ПЕРЕЗАПИСЫВАЕТ approx (тот же source_id → та же строка)
+    l, _ = upsert_raw_listing(db_session, _geo_raw(lat=41.31, lng=69.26, precision="exact"))
+    db_session.commit()
+    assert l.id == first_id
+    assert l.coords_precision == "exact"
+    assert l.lat == pytest.approx(41.31) and l.lng == pytest.approx(69.26)
+
+    # 3) approx НЕ затирает exact
+    l, _ = upsert_raw_listing(db_session, _geo_raw(lat=41.99, lng=69.99, precision="approx"))
+    db_session.commit()
+    assert l.coords_precision == "exact"
+    assert l.lat == pytest.approx(41.31) and l.lng == pytest.approx(69.26)
+
+    # 4) строка без координат НЕ обнуляет известную точку
+    l, _ = upsert_raw_listing(db_session, _geo_raw())
+    db_session.commit()
+    assert l.coords_precision == "exact"
+    assert l.lat == pytest.approx(41.31) and l.lng == pytest.approx(69.26)

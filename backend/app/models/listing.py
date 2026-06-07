@@ -3,15 +3,20 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 
 
 class Listing(Base):
     __tablename__ = "listings"
-    __table_args__ = (UniqueConstraint("source", "source_id", name="uq_listing_source_id"),)
+    __table_args__ = (
+        UniqueConstraint("source", "source_id", name="uq_listing_source_id"),
+        # Составной B-tree под bbox-запросы карты (см. миграцию 0018). Объявлен здесь,
+        # чтобы create_all (тесты/свежий dev) совпадал с прод-схемой из миграции.
+        Index("ix_listings_lat_lng", "lat", "lng"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     source: Mapped[str] = mapped_column(String(40), index=True)
@@ -66,6 +71,17 @@ class Listing(Base):
     )
     deposit: Mapped[Optional[float]] = mapped_column(Numeric(14, 2), nullable=True)  # опционально
     utilities_included: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # опционально
+
+    # --- Гео для карты (миграция 0018). NULL = координат нет (старые строки,
+    #     Realt24); наливаются при повторном проходе через парсер.
+    #     coords_precision: 'exact' (Uybor) | 'approx' (OLX, размытие ~2-5 км) | NULL. ---
+    lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    coords_precision: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+
+    # Справочник ЖК. lazy="select": деталь-эндпоинт читает имя без явного eager-load;
+    # в списке листингов грузим через selectinload, чтобы не ловить N+1.
+    residential_complex: Mapped[Optional["ResidentialComplex"]] = relationship(lazy="select")
 
 
 class ResidentialComplex(Base):

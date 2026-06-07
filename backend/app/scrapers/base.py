@@ -27,6 +27,9 @@ class RawListing:
     price_period: str | None = None  # "month" | "day"; только для аренды
     seller_id: str | None = None     # id продавца у площадки (Uybor userId, OLX user.id) — для детекции агентов
     is_business: bool | None = None  # площадка сама помечает бизнес-аккаунт (OLX isBusiness) → агент; None=неизвестно
+    lat: float | None = None         # широта для карты (миграция 0018)
+    lng: float | None = None         # долгота (⚠️ у OLX в источнике поле зовётся lon)
+    coords_precision: str | None = None  # "exact" (Uybor) | "approx" (OLX, размытие ~2-5 км) | None
 
 
 @dataclass

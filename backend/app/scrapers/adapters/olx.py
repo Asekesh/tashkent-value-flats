@@ -95,6 +95,7 @@ class OlxAdapter(SourceAdapter):
         photo_map = _extract_prerendered_photos(html)
         param_map = _extract_prerendered_params(html)
         seller_map = _extract_prerendered_sellers(html)
+        coords_map = _extract_prerendered_coords(html)
         listings: list[RawListing] = []
         seen: set[str] = set()
         for offer in _extract_jsonld_offers(soup):
@@ -129,6 +130,14 @@ class OlxAdapter(SourceAdapter):
                     raw.seller_id = seller.get("seller_id")
                 if seller.get("is_business") is not None:
                     raw.is_business = seller["is_business"]
+            # Координаты (размытые ~2-5 км) из ad.map — точность всегда approx.
+            coords = coords_map.get(raw.source_id) or coords_map.get(
+                _source_id_from_url(raw.url)
+            )
+            if coords:
+                raw.lat = coords["lat"]
+                raw.lng = coords["lng"]
+                raw.coords_precision = "approx"
         return listings
 
     def probe_listing(self, url: str, client: httpx.Client) -> ListingProbe:
@@ -303,6 +312,41 @@ def _extract_prerendered_sellers(html: str) -> dict[str, dict]:
         if url:
             seller_map[_source_id_from_url(url)] = info
     return seller_map
+
+
+def _extract_prerendered_coords(html: str) -> dict[str, dict]:
+    """Координаты каждого объявления из embedded-state (``ad.map``).
+
+    OLX отдаёт ТОЛЬКО размытую точку: ``show_detailed`` всегда False, ``radius``
+    ~2-5 км — поэтому точность всегда ``approx`` (не выдаём за точный адрес).
+    ⚠️ долгота у OLX в поле ``lon``, маппим в ``lng``. JSON-LD/карточки координат
+    не несут — берём из __PRERENDERED_STATE__. Ключуем по id и url-коду, как
+    photo_map/param_map/seller_map.
+    """
+    data = _load_prerendered_state(html)
+    if data is None:
+        return {}
+    ads = data.get("listing", {}).get("listing", {}).get("ads")
+    if not isinstance(ads, list):
+        return {}
+    coords_map: dict[str, dict] = {}
+    for ad in ads:
+        if not isinstance(ad, dict):
+            continue
+        mp = ad.get("map")
+        if not isinstance(mp, dict):
+            continue
+        lat = _float_or_none(mp.get("lat"))
+        lng = _float_or_none(mp.get("lon"))  # OLX: долгота = lon, не lng
+        if lat is None or lng is None:
+            continue
+        info = {"lat": lat, "lng": lng}
+        if ad.get("id") is not None:
+            coords_map[str(ad["id"])] = info
+        url = compact_text(ad.get("url"))
+        if url:
+            coords_map[_source_id_from_url(url)] = info
+    return coords_map
 
 
 def _flatten_params(params) -> dict[str, str]:

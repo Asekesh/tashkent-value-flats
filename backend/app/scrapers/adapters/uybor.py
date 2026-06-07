@@ -146,6 +146,9 @@ class UyborAdapter(SourceAdapter):
             price_period: str | None = "month"
         else:
             price_period = None
+        # Координаты для карты: Uybor отдаёт точную точку (lat/lng в выдаче).
+        lat = to_float(item.get("lat"))
+        lng = to_float(item.get("lng"))
         title = _title_for(item, rooms, area_m2, floor, total_floors)
         return RawListing(
             source=self.source,
@@ -167,6 +170,9 @@ class UyborAdapter(SourceAdapter):
             deal_type=self.deal_type,
             price_period=price_period,
             seller_id=compact_text(str(item.get("userId") or "")) or None,
+            lat=lat,
+            lng=lng,
+            coords_precision="exact" if (lat is not None and lng is not None) else None,
         )
 
 

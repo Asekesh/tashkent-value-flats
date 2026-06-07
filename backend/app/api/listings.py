@@ -6,11 +6,11 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, asc, func, nulls_last, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.models import Listing, ListingEvent
+from app.models import Listing, ListingEvent, ResidentialComplex
 from app.schemas.listing import (
     CmaResultOut,
     ListingEventOut,
@@ -44,6 +44,7 @@ def get_listings(
     q: Optional[str] = None,  # «содержит»: слова в заголовке/описании/адресе, нужны ВСЕ
     exclude: Optional[str] = None,  # «исключить»: выкинуть, если есть ЛЮБОЕ слово
     source: Optional[str] = None,
+    residential_complex: Optional[str] = None,  # поиск по имени ЖК (ILIKE)
     deal_type: Literal["sale", "rent"] = "sale",
     seller_type: Optional[Literal["owner", "agent", "unknown"]] = None,  # «без агентов» = owner
     sort: Literal["discount", "price_per_m2", "fresh", "price"] = "discount",
@@ -86,6 +87,15 @@ def get_listings(
         conditions.append(Listing.floor <= floor_max)
     if source:
         conditions.append(Listing.source == source)
+    if residential_complex and residential_complex.strip():
+        # Подзапрос вместо JOIN — встаёт в общий список conditions и работает
+        # одинаково для count(total) и для самой страницы.
+        like = f"%{residential_complex.strip()}%"
+        conditions.append(
+            Listing.residential_complex_id.in_(
+                select(ResidentialComplex.id).where(ResidentialComplex.name.ilike(like))
+            )
+        )
     if seller_type:
         conditions.append(Listing.seller_type == seller_type)
     if discount_min is not None:
@@ -134,7 +144,12 @@ def get_listings(
 
     total = db.scalar(select(func.count()).select_from(Listing).where(*conditions)) or 0
     rows = db.scalars(
-        select(Listing).where(*conditions).order_by(*order_by).limit(limit).offset(offset)
+        select(Listing)
+        .where(*conditions)
+        .options(selectinload(Listing.residential_complex))  # имя ЖК для карточки без N+1
+        .order_by(*order_by)
+        .limit(limit)
+        .offset(offset)
     ).all()
     items = [_build_item(listing) for listing in rows]
     return ListingsPage(items=items, total=total)
