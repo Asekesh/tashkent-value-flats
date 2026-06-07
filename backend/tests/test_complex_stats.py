@@ -98,9 +98,19 @@ def test_api_complexes_and_listing_attaches_comparison(client, db_session):
     alpha = next(c for c in resp["items"] if c["name"] == "Alpha")
     assert alpha["count"] == 5 and alpha["median_price_per_m2_usd"] == 1200.0
 
+    # total = всё число квалифицирующихся ЖК, а не размер страницы. Delta — разные
+    # площади (≠ Alpha и попарно), чтобы flat-дедуп (area_m2 == + цена ±5%) не схлопнул.
+    for i in range(5):
+        upsert_raw_listing(
+            db_session, _raw(f"Delta-{i}", f"ЖК Delta, дом {i}", 1200 * (70 + i), area=70 + i)
+        )
+    db_session.commit()
+    paged = client.get("/api/complexes", params={"deal_type": "sale", "limit": 1}).json()
+    assert paged["total"] == 2 and len(paged["items"]) == 1
+
     items = client.get("/api/listings", params={"deal_type": "sale"}).json()["items"]
     with_cm = [i for i in items if i.get("complex_market")]
     assert with_cm, "ожидали листинги со сравнением по ЖК"
-    cm = with_cm[0]["complex_market"]
-    assert cm["name"] == "Alpha" and cm["median_price_per_m2_usd"] == 1200.0
-    assert "vs_complex_percent" in cm
+    alpha_cm = next(i["complex_market"] for i in with_cm if i["complex_market"]["name"] == "Alpha")
+    assert alpha_cm["median_price_per_m2_usd"] == 1200.0
+    assert "vs_complex_percent" in alpha_cm

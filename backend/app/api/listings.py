@@ -257,13 +257,15 @@ def get_complexes(
     """Агрегаты по ЖК (медиана цены/$м², число объявлений) — только ЖК с ≥порога
     листингов, иначе «средняя» это шум."""
     settings = get_settings()
-    stats = list_complex_stats(db, settings, deal_type=deal_type, district=district, limit=limit)
+    # Берём ВСЕ квалифицирующиеся ЖК (их немного, ~сотни), чтобы total отражал
+    # полное число, а limit резал только выдачу.
+    stats = list_complex_stats(db, settings, deal_type=deal_type, district=district, limit=10_000)
     if sort == "median_ppm":
         stats.sort(key=lambda s: s.median_price_per_m2_usd)
     elif sort == "median_price":
         stats.sort(key=lambda s: s.median_price_usd)
-    items = [ComplexStatOut(**s.__dict__) for s in stats]
-    return ComplexStatsPage(items=items, total=len(items))
+    items = [ComplexStatOut(**s.__dict__) for s in stats[:limit]]
+    return ComplexStatsPage(items=items, total=len(stats))
 
 
 @router.get("/listings/{listing_id}", response_model=ListingOut)
