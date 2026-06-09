@@ -53,6 +53,7 @@ def get_listings(
     residential_complex: Optional[str] = None,  # поиск по имени ЖК (ILIKE)
     deal_type: Literal["sale", "rent"] = "sale",
     seller_type: Optional[Literal["owner", "agent", "unknown"]] = None,  # «без агентов» = owner
+    is_furnished: Optional[bool] = None,  # аренда: True = только с мебелью (фронт шлёт лишь True)
     sort: Literal["discount", "price_per_m2", "fresh", "price"] = "discount",
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -102,8 +103,17 @@ def get_listings(
                 select(ResidentialComplex.id).where(ResidentialComplex.name.ilike(like))
             )
         )
-    if seller_type:
+    if seller_type == "owner":
+        # «Только собственники» = «без лишней оплаты»: собственник ИЛИ объявление
+        # явно помечено без комиссии. commission_pct заполнен только для аренды
+        # (OLX param), поэтому на продаже фильтр сводится к прежнему seller_type=owner.
+        conditions.append(
+            or_(Listing.seller_type == "owner", Listing.commission_pct == 0)
+        )
+    elif seller_type:
         conditions.append(Listing.seller_type == seller_type)
+    if is_furnished is not None:
+        conditions.append(Listing.is_furnished == is_furnished)
     if discount_min is not None:
         # discount_percent заполняется только вместе с market-оценкой
         # (apply_estimate всегда пишет market_basis), поэтому отбор по самой

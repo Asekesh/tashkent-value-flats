@@ -1,9 +1,9 @@
 import json
 
 from app.scrapers.registry import parse_fixture
-from app.scrapers.adapters.olx import OlxAdapter, _detail_is_archived
+from app.scrapers.adapters.olx import OlxAdapter, _detail_is_archived, _yesno_to_bool
 from app.scrapers.adapters.realt24 import Realt24Adapter
-from app.scrapers.adapters.uybor import UyborAdapter
+from app.scrapers.adapters.uybor import UyborAdapter, _furnished_from_text
 from app.services.normalization import price_per_m2, to_usd
 
 
@@ -32,6 +32,31 @@ def test_olx_fixture_parser_normalizes_core_fields():
     assert first.district == "Мирзо-Улугбекский район"
     assert first.floor == 4
     assert first.total_floors == 9
+
+
+def test_uybor_furnished_from_text_handles_negation():
+    # Положительные формулировки → True
+    assert _furnished_from_text("Сдается квартира с мебелью") is True
+    assert _furnished_from_text("Меблированная, заходи и живи") is True
+    assert _furnished_from_text("вся мебель остается") is True
+    # Отрицание (в т.ч. слитное/раздельное «не меблир…») → False
+    assert _furnished_from_text("квартира без мебели") is False
+    assert _furnished_from_text("Сдается немеблированная квартира") is False
+    assert _furnished_from_text("Квартира НЕ меблирована") is False
+    assert _furnished_from_text("не-меблированная") is False
+    # Нет явного сигнала / пусто → None (не выдумываем)
+    assert _furnished_from_text("Чистая квартира, евроремонт") is None
+    assert _furnished_from_text("") is None
+    assert _furnished_from_text(None) is None
+
+
+def test_olx_yesno_to_bool():
+    assert _yesno_to_bool("yes") is True
+    assert _yesno_to_bool("no") is False
+    assert _yesno_to_bool("YES") is True
+    assert _yesno_to_bool(None) is None
+    assert _yesno_to_bool("") is None
+    assert _yesno_to_bool("да") is None  # OLX отдаёт только yes/no, не локализованное
 
 
 def test_price_helpers_convert_to_usd_and_price_per_meter():

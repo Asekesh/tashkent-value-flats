@@ -115,6 +115,14 @@ class OlxAdapter(SourceAdapter):
             raw.deal_type = self.deal_type
             if self.deal_type == "rent":
                 raw.price_period = "month"
+                rent_params = param_map.get(raw.source_id) or param_map.get(
+                    _source_id_from_url(raw.url)
+                )
+                if rent_params:
+                    if rent_params.get("is_furnished") is not None:
+                        raw.is_furnished = rent_params["is_furnished"]
+                    if rent_params.get("commission_pct") is not None:
+                        raw.commission_pct = rent_params["commission_pct"]
             if not raw.photos:
                 raw.photos = photo_map.get(raw.source_id) or photo_map.get(
                     _source_id_from_url(raw.url)
@@ -269,6 +277,10 @@ def _extract_prerendered_params(html: str) -> dict[str, dict]:
             "total_floors": _int_or_none(flat.get("total_floors")),
             "area_m2": _float_or_none(flat.get("total_area")),
             "rooms": _int_or_none(flat.get("number_of_rooms")),
+            # Аренда: структурные параметры OLX (100% покрытие в выдаче rent).
+            # ⚠️ ключ comission — опечатка самого OLX; значения yes/no.
+            "is_furnished": _yesno_to_bool(flat.get("furnished")),
+            "commission_pct": 0.0 if (flat.get("comission") or "").strip().lower() == "no" else None,
         }
         if not any(value is not None for value in info.values()):
             continue
@@ -387,6 +399,16 @@ def _float_or_none(value) -> float | None:
         return float(str(value).replace(",", "."))
     except (TypeError, ValueError):
         return None
+
+
+def _yesno_to_bool(value) -> bool | None:
+    """OLX булевы параметры (furnished и т.п.) приходят как 'yes'/'no'."""
+    v = (value or "").strip().lower()
+    if v == "yes":
+        return True
+    if v == "no":
+        return False
+    return None
 
 
 def _extract_detail_usd_price(html: str) -> float | None:

@@ -209,6 +209,12 @@ def upsert_raw_listing(db: Session, raw: RawListing) -> tuple[Listing, bool]:
             listing.is_business = raw.is_business
         listing.deal_type = raw.deal_type
         listing.price_period = raw.price_period
+        # Поля аренды: только OLX (структурно) и Uybor (из текста) их несут;
+        # reprobe/детальный проход — нет, поэтому не затираем известное None'ом.
+        if raw.is_furnished is not None:
+            listing.is_furnished = raw.is_furnished
+        if raw.commission_pct is not None:
+            listing.commission_pct = raw.commission_pct
         listing.published_at = raw.published_at
     # Floor is a physical property of the flat, identical across reposts — fill
     # it from any incoming row that knows it, even a not-cheaper duplicate that
@@ -528,6 +534,11 @@ def listing_to_dict(listing: Listing) -> dict:
         "seller_type": listing.seller_type,
         "residential_complex_id": listing.residential_complex_id,
         "residential_complex": listing.residential_complex.name if listing.residential_complex else None,
+        # Поля аренды (Numeric → float, чтобы pydantic не тащил Decimal).
+        # deposit/utilities_included не отдаём: источники их не несут.
+        "price_period": listing.price_period,
+        "is_furnished": listing.is_furnished,
+        "commission_pct": float(listing.commission_pct) if listing.commission_pct is not None else None,
         "published_at": listing.published_at,
         "seen_at": listing.seen_at,
         "status": listing.status,

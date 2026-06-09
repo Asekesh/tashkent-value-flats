@@ -15,6 +15,7 @@ const defaultFilters = {
   source: "",
   residential_complex: "",
   seller_type: "",
+  is_furnished: "",
   sort: "discount",
 };
 
@@ -87,12 +88,14 @@ document.querySelectorAll(".deal-toggle-btn").forEach((btn) => {
     });
     goal(`deal_${deal}`);
     state.selectedId = null;
+    applyDealTypeUI();
     fetchDashboardStats();
     fetchListings(readFilters(), 0);
   });
 });
 document.querySelector("#resetButton").addEventListener("click", resetFilters);
 document.querySelector("#seller_type").addEventListener("change", () => fetchListings(readFilters(), 0));
+document.querySelector("#is_furnished").addEventListener("change", () => fetchListings(readFilters(), 0));
 document.querySelector("#refreshRunsButton").addEventListener("click", fetchTasks);
 document.querySelector("#refreshSourcePagesButton").addEventListener("click", fetchSourceStats);
 document.querySelector("#feedbackNav").addEventListener("click", () => { goal("feedback_open"); showFeedbackModal(); });
@@ -326,6 +329,11 @@ function priceSfx() {
 function ppmUnit() {
   return isRent() ? "/м²/мес" : "/м²";
 }
+// Фильтр «С мебелью» имеет смысл только в аренде (на продаже мебель=NULL).
+function applyDealTypeUI() {
+  const furnished = document.querySelector("#furnishedField");
+  if (furnished) furnished.hidden = !isRent();
+}
 
 async function fetchListings(filters = readFilters(), page = 0) {
   setBusy(true, "Загружаем объявления...");
@@ -535,6 +543,7 @@ function renderInsight() {
       <dt>Дубли</dt><dd>${listing.duplicate_count}</dd>
       <dt>Источник</dt><dd>${escapeHtml(sourceLabel(listing.source))}</dd>
     </dl>
+    ${rentBadges(listing) ? `<div class="chips insight-chips">${rentBadges(listing)}</div>` : ""}
     <a class="btn btn-secondary btn-block" href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">Источник</a>
     <div id="cheaperSimilar" class="cheaper-similar"><p class="muted-text">${icon("chart")} Ищем похожие дешевле…</p></div>
   `;
@@ -809,6 +818,18 @@ function yieldControl(ry) {
     + `<span class="chip success" hidden title="${escapeAttr(title)}">Доходность ${ry.gross_yield_percent.toFixed(1)}% · окуп. ${years} ${yw}</span>`;
 }
 
+function rentBadges(listing) {
+  // Факторы решения арендатора — мебель и комиссия (депозит/коммуналку
+  // источники не отдают). Только для аренды; NULL (неизвестно) не показываем.
+  if (!isRent()) return "";
+  const parts = [];
+  if (listing.is_furnished === true) parts.push(`<span class="chip muted">С мебелью</span>`);
+  else if (listing.is_furnished === false) parts.push(`<span class="chip muted">Без мебели</span>`);
+  if (listing.commission_pct === 0) parts.push(`<span class="chip success">Без комиссии</span>`);
+  else if (listing.commission_pct > 0) parts.push(`<span class="chip muted">Комиссия ${Math.round(listing.commission_pct)}%</span>`);
+  return parts.join("");
+}
+
 function listingCard(listing, rank) {
   const photo = listing.photos?.[0] ?? "";
   const discount = listing.market?.discount_percent;
@@ -826,6 +847,7 @@ function listingCard(listing, rank) {
           <span class="chip muted">Источник: ${escapeHtml(sourceLabel(listing.source))}</span>
           ${listing.seller_type ? `<span class="chip muted">${escapeHtml(sellerLabel(listing.seller_type))}</span>` : ""}
           ${listing.residential_complex ? `<span class="chip muted">ЖК ${escapeHtml(listing.residential_complex)}</span>` : ""}
+          ${rentBadges(listing)}
         </div>
         <h3>${escapeHtml(listing.title)}</h3>
         <p class="listing-subtitle">${escapeHtml(listing.address_raw || listing.district)}</p>
@@ -1443,8 +1465,11 @@ function toggleFavorite(id) {
 
 function readFilters() {
   return Object.fromEntries(filterIds.map((id) => {
-    // Тумблер «Только собственники» — чекбокс: вкл → seller_type=owner, выкл → пусто.
+    // Тумблер «Без комиссии» — чекбокс: вкл → seller_type=owner, выкл → пусто.
+    // На бэке owner расширяется до «собственник ИЛИ commission_pct=0» (см. api/listings).
     if (id === "seller_type") return [id, document.querySelector("#seller_type").checked ? "owner" : ""];
+    // «С мебелью» — только аренда: на продаже мебель=NULL, иначе выдача обнулится.
+    if (id === "is_furnished") return [id, (isRent() && document.querySelector("#is_furnished").checked) ? "true" : ""];
     return [id, document.querySelector(`#${id}`).value];
   }));
 }
@@ -1456,6 +1481,8 @@ function writeFilters(filters) {
       districtMulti.setValue(value);
     } else if (id === "seller_type") {
       document.querySelector("#seller_type").checked = value === "owner";
+    } else if (id === "is_furnished") {
+      document.querySelector("#is_furnished").checked = value === "true";
     } else {
       document.querySelector(`#${id}`).value = value;
     }

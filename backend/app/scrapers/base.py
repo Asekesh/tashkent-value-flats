@@ -25,6 +25,8 @@ class RawListing:
     published_at: datetime | None = None
     deal_type: str = "sale"          # "sale" | "rent"
     price_period: str | None = None  # "month" | "day"; только для аренды
+    is_furnished: bool | None = None      # аренда: OLX param furnished (структурно), Uybor — из текста; None=неизвестно
+    commission_pct: float | None = None   # аренда: OLX param comission=no → 0 (без комиссии); yes/неизвестно → None
     seller_id: str | None = None     # id продавца у площадки (Uybor userId, OLX user.id) — для детекции агентов
     is_business: bool | None = None  # площадка сама помечает бизнес-аккаунт (OLX isBusiness) → агент; None=неизвестно
     lat: float | None = None         # широта для карты (миграция 0018)

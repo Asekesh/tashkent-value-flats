@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
+import re
 import time
 from typing import Any
 from typing import Iterator
@@ -144,8 +145,10 @@ class UyborAdapter(SourceAdapter):
             if period != "month":
                 return None
             price_period: str | None = "month"
+            is_furnished = _furnished_from_text(description)
         else:
             price_period = None
+            is_furnished = None
         # Координаты для карты: Uybor отдаёт точную точку (lat/lng в выдаче).
         lat = to_float(item.get("lat"))
         lng = to_float(item.get("lng"))
@@ -169,6 +172,7 @@ class UyborAdapter(SourceAdapter):
             published_at=parse_iso_datetime(item.get("upAt") or item.get("createdAt")),
             deal_type=self.deal_type,
             price_period=price_period,
+            is_furnished=is_furnished,
             seller_id=compact_text(str(item.get("userId") or "")) or None,
             lat=lat,
             lng=lng,
@@ -182,6 +186,25 @@ class UyborRentAdapter(UyborAdapter):
 
     deal_type = "rent"
     operation_type = "rent"
+
+
+# NEG ловит и «без мебели», и слитное/раздельное отрицание «не(-) меблир…»
+# (иначе голый `меблир` в POS даёт ложный True на «немеблированная»).
+_FURNISHED_NEG = re.compile(r"без\s+мебел|не\s*-?\s*меблир", re.I)
+_FURNISHED_POS = re.compile(r"меблир|с\s+мебел|вся\s+мебел|есть\s+мебел|мебел\w*\s+есть", re.I)
+
+
+def _furnished_from_text(text: str | None) -> bool | None:
+    """Uybor не отдаёт мебель структурно — извлекаем из описания. Консервативно:
+    сначала отрицание ('без мебели'/'не меблирована' → False), потом наличие →
+    True, иначе None. Покрытие ~четверть rent-описаний, только явные формулировки."""
+    if not text:
+        return None
+    if _FURNISHED_NEG.search(text):
+        return False
+    if _FURNISHED_POS.search(text):
+        return True
+    return None
 
 
 def _rooms_from_value(value: Any) -> int | None:

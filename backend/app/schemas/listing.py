@@ -54,6 +54,11 @@ class ListingOut(BaseModel):
     seller_type: Optional[str]
     residential_complex_id: Optional[int] = None
     residential_complex: Optional[str] = None
+    # --- Поля аренды. Для продажи NULL, на фронте показываются только под isRent().
+    #     deposit/utilities_included не выставляем: источники их не несут. ---
+    price_period: Optional[str] = None  # 'month' | 'day'
+    is_furnished: Optional[bool] = None
+    commission_pct: Optional[float] = None  # 0 = без комиссии, NULL = неизвестно
     published_at: Optional[datetime]
     seen_at: datetime
     status: str

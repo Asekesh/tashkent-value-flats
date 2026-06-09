@@ -1312,7 +1312,7 @@ select:focus {
   margin-top: 14px;
 }
 
-/* Toggle switch — фильтр «Только собственники» (потом — платная фича) */
+/* Toggle switch — фильтр «Без комиссии» (собственник/без комиссии; платная фича) */
 .switch {
   align-items: center;
   cursor: pointer;
