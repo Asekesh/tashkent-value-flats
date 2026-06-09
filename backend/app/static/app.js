@@ -27,6 +27,7 @@ function goal(id) {
 }
 const state = {
   view: "dashboard",
+  dealType: "sale", // тумблер Продажа/Аренда — прокидывается во все фетчи листингов
   listings: [],
   selectedId: null,
   total: 0,
@@ -74,6 +75,22 @@ document.querySelector("#quickScanButton").addEventListener("click", () => runSc
 document.querySelector("#fullScanButton").addEventListener("click", () => runScrapeMode("full"));
 document.querySelector("#stopScanButton").addEventListener("click", stopScrape);
 document.querySelector("#applyButton").addEventListener("click", () => fetchListings(readFilters(), 0));
+document.querySelectorAll(".deal-toggle-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const deal = btn.dataset.deal;
+    if (deal === state.dealType) return;
+    state.dealType = deal;
+    document.querySelectorAll(".deal-toggle-btn").forEach((b) => {
+      const on = b.dataset.deal === deal;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    goal(`deal_${deal}`);
+    state.selectedId = null;
+    fetchDashboardStats();
+    fetchListings(readFilters(), 0);
+  });
+});
 document.querySelector("#resetButton").addEventListener("click", resetFilters);
 document.querySelector("#seller_type").addEventListener("change", () => fetchListings(readFilters(), 0));
 document.querySelector("#refreshRunsButton").addEventListener("click", fetchTasks);
@@ -299,6 +316,17 @@ function formatDateTime(value) {
   return `${d}.${m}.${y}, ${h}:${min}`;
 }
 
+// Аренда vs продажа — единицы цены. Аренда помесячная: цена «/мес», цена/м² «/м²/мес».
+function isRent() {
+  return state.dealType === "rent";
+}
+function priceSfx() {
+  return isRent() ? "/мес" : "";
+}
+function ppmUnit() {
+  return isRent() ? "/м²/мес" : "/м²";
+}
+
 async function fetchListings(filters = readFilters(), page = 0) {
   setBusy(true, "Загружаем объявления...");
   renderSkeletons();
@@ -306,6 +334,7 @@ async function fetchListings(filters = readFilters(), page = 0) {
   Object.entries(filters).forEach(([key, value]) => {
     if (value) params.set(key, value);
   });
+  params.set("deal_type", state.dealType);
   params.set("limit", String(PAGE_SIZE));
   params.set("offset", String(page * PAGE_SIZE));
   try {
@@ -349,7 +378,7 @@ async function fetchTasks() {
 
 async function fetchDashboardStats() {
   try {
-    const response = await fetch("/api/listings/stats");
+    const response = await fetch(`/api/listings/stats?deal_type=${state.dealType}`);
     if (!response.ok) return;
     state.stats = await response.json();
     renderStats();
@@ -498,10 +527,10 @@ function renderInsight() {
   insightPanel.innerHTML = `
     <div class="section-title">${icon("trending-down")} <span>Рыночный ориентир</span></div>
     <h3>${escapeHtml(listing.title)}</h3>
-    <div class="large-price">$${money(listing.price_usd)}</div>
+    <div class="large-price">$${money(listing.price_usd)}${priceSfx()}</div>
     <dl>
-      <dt>Цена за м²</dt><dd>$${money(listing.price_per_m2_usd)}</dd>
-      <dt>Рынок за м²</dt><dd>${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}` : "мало данных"}</dd>
+      <dt>Цена за м²</dt><dd>$${money(listing.price_per_m2_usd)}${priceSfx()}</dd>
+      <dt>Рынок за м²</dt><dd>${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}${priceSfx()}` : "мало данных"}</dd>
       <dt>Дисконт</dt><dd>${listing.market?.discount_percent != null ? `${listing.market.discount_percent.toFixed(1)}%` : "нет"}</dd>
       <dt>Дубли</dt><dd>${listing.duplicate_count}</dd>
       <dt>Источник</dt><dd>${escapeHtml(sourceLabel(listing.source))}</dd>
@@ -564,7 +593,7 @@ async function renderCheaperSimilar(listing) {
         const savePct = base ? Math.round((1 - a.price_per_m2_usd / base) * 100) : 0;
         return `
           <a class="cheaper-row" href="${escapeAttr(a.url)}" target="_blank" rel="noreferrer noopener">
-            <span class="cheaper-main"><strong>$${money(a.price_usd)}</strong><small>${a.area_m2} м² · $${money(a.price_per_m2_usd)}/м²</small></span>
+            <span class="cheaper-main"><strong>$${money(a.price_usd)}${priceSfx()}</strong><small>${a.area_m2} м² · $${money(a.price_per_m2_usd)}${ppmUnit()}</small></span>
             <span class="cheaper-save">−$${money(saveAbs)} · −${savePct}%</span>
           </a>`;
       })
@@ -803,11 +832,11 @@ function listingCard(listing, rank) {
         <div class="listing-facts">
           <span>⌖ ${escapeHtml(listing.district)}</span>
           <span>□ ${listing.area_m2} м²</span>
-          <span>${icon("trending-down")} $${money(listing.price_per_m2_usd)}/м²</span>
+          <span>${icon("trending-down")} $${money(listing.price_per_m2_usd)}${ppmUnit()}</span>
           <span>${icon("clock")} ${formatDate(listing.seen_at)}</span>
         </div>
         <div class="listing-bottom">
-          <div><strong>$${money(listing.price_usd)}</strong><span>рынок: ${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}/м²` : "мало данных"}</span>${listing.complex_market ? `<span class="complex-vs${listing.complex_market.is_below_complex ? " good" : ""}">${complexVsText(listing.complex_market)}</span>` : ""}</div>
+          <div><strong>$${money(listing.price_usd)}${priceSfx()}</strong><span>${isRent() ? "рынок аренды" : "рынок"}: ${listing.market?.market_price_per_m2_usd ? `$${money(listing.market.market_price_per_m2_usd)}${ppmUnit()}` : "мало данных"}</span>${listing.complex_market ? `<span class="complex-vs${listing.complex_market.is_below_complex ? " good" : ""}">${complexVsText(listing.complex_market)}</span>` : ""}</div>
           <div class="row-actions">
             <button class="icon-button favorite${favorite}" data-favorite="${listing.id}" title="Избранное" type="button">${icon(favorite ? "heart-fill" : "heart")}</button>
             <button class="btn btn-ghost" data-cma="${listing.id}" title="Сравнительный анализ" type="button">${icon("chart")} Найти аналоги</button>

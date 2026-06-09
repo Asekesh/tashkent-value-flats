@@ -1009,6 +1009,44 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* Сегмент-контрол «Продажа / Аренда» в топбаре. */
+.deal-toggle {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+}
+
+.deal-toggle-btn {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  min-height: 30px;
+  padding: 0 var(--sp-5);
+}
+
+.deal-toggle-btn:hover {
+  color: var(--color-text-body);
+}
+
+.deal-toggle-btn.active {
+  background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+}
+
+.deal-toggle-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .listing-body h3 {
   font-size: var(--fs-base);
   font-weight: var(--fw-bold);
