@@ -23,6 +23,15 @@ class ComplexComparison(BaseModel):
     is_below_complex: bool = False
 
 
+class RentalYieldOut(BaseModel):
+    """Валовая доходность от сдачи (до налогов/простоя) для листинга на продажу."""
+    gross_yield_percent: float
+    payback_years: float
+    rent_median_ppm_month: float
+    basis: str  # "complex" | "district"
+    sample_size: int
+
+
 class ListingOut(BaseModel):
     id: int
     source: str
@@ -52,6 +61,7 @@ class ListingOut(BaseModel):
     source_urls: list[dict[str, str]]
     market: Optional[MarketEstimate] = None
     complex_market: Optional[ComplexComparison] = None  # сравнение со своим ЖК
+    rental_yield: Optional[RentalYieldOut] = None  # доходность от сдачи (только sale)
 
     model_config = ConfigDict(from_attributes=True)
 

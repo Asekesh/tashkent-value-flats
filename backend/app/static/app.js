@@ -768,6 +768,18 @@ function complexVsText(cm) {
   return `${med} · как в ЖК`;
 }
 
+function yieldControl(ry) {
+  // Доходность спрятана под кнопку: клик раскрывает (задел под платную фичу —
+  // позже кнопка станет триггером пейволла). Считается только на продаже, где
+  // есть аренда того же ЖК/района.
+  const years = Math.round(ry.payback_years);
+  const yw = pluralRu(years, ["год", "года", "лет"]);
+  const where = ry.basis === "complex" ? "того же ЖК" : "района";
+  const title = `Если сдавать: валовая доходность ~${ry.gross_yield_percent.toFixed(1)}% в год, окупаемость ~${years} ${yw}. По медиане аренды ${where}; до налогов и простоя.`;
+  return `<button class="chip chip-reveal" data-yield-reveal type="button" title="Показать доходность от сдачи">Доходность ▸</button>`
+    + `<span class="chip success" hidden title="${escapeAttr(title)}">Доходность ${ry.gross_yield_percent.toFixed(1)}% · окуп. ${years} ${yw}</span>`;
+}
+
 function listingCard(listing, rank) {
   const photo = listing.photos?.[0] ?? "";
   const discount = listing.market?.discount_percent;
@@ -780,6 +792,7 @@ function listingCard(listing, rank) {
         <div class="chips">
           <span class="rank">${rank}</span>
           ${isHotDeal(listing) ? `<span class="chip danger">-${discount.toFixed(1)}%</span>` : ""}
+          ${listing.rental_yield ? yieldControl(listing.rental_yield) : ""}
           <span class="chip">${listing.rooms}-комн.</span>
           <span class="chip muted">Источник: ${escapeHtml(sourceLabel(listing.source))}</span>
           ${listing.seller_type ? `<span class="chip muted">${escapeHtml(sellerLabel(listing.seller_type))}</span>` : ""}
@@ -836,6 +849,15 @@ function bindCards(root) {
       event.stopPropagation();
       goal("history_open");
       openHistory(Number(button.dataset.history));
+    });
+  });
+  root.querySelectorAll("[data-yield-reveal]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();  // не открывать ссылку объявления
+      goal("yield_reveal");
+      const chip = button.nextElementSibling;  // скрытый .chip.success
+      if (chip) chip.hidden = false;
+      button.remove();
     });
   });
   // Hotlinked photos from the source platforms can 403/404 (hotlink

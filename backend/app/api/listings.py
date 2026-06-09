@@ -22,11 +22,13 @@ from app.schemas.listing import (
     ListingOut,
     ListingsPage,
     MarketEstimate,
+    RentalYieldOut,
 )
 from app.services.cma import build_cma
 from app.services.complex_stats import build_comparison, complex_comparison_map, list_complex_stats
 from app.services.listings import listing_to_dict
 from app.services.market import estimate_market
+from app.services.rental_yield import yields_for_rows
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -157,7 +159,20 @@ def get_listings(
     ).all()
     items = [_build_item(listing) for listing in rows]
     _attach_complex_comparison(db, settings, rows, items, deal_type)
+    _attach_rental_yield(db, settings, rows, items, deal_type)
     return ListingsPage(items=items, total=total)
+
+
+def _attach_rental_yield(db, settings, rows, items, deal_type) -> None:
+    """Вешает доходность от сдачи на sale-листинги страницы (батч, без N+1).
+    Для аренды no-op (см. [rental_yield.yields_for_rows])."""
+    ymap = yields_for_rows(db, settings, rows, deal_type)
+    if not ymap:
+        return
+    for row, item in zip(rows, items):
+        ry = ymap.get(row.id)
+        if ry is not None:
+            item.rental_yield = RentalYieldOut(**ry.__dict__)
 
 
 def _attach_complex_comparison(db, settings, rows, items, deal_type) -> None:
@@ -343,6 +358,7 @@ def get_market_estimate(
     segment: Optional[Literal["new", "secondary"]] = None,
     floor: Optional[int] = None,
     total_floors: Optional[int] = None,
+    deal_type: Literal["sale", "rent"] = "sale",
     db: Session = Depends(get_db),
 ) -> MarketEstimate:
     estimate = estimate_market(
@@ -355,6 +371,7 @@ def get_market_estimate(
         segment=segment,
         floor=floor,
         total_floors=total_floors,
+        deal_type=deal_type,
     )
     return MarketEstimate(**estimate.__dict__)
 
@@ -377,5 +394,7 @@ def _build_item(listing: Listing) -> ListingOut:
 
 def _with_market(db: Session, listing: Listing) -> ListingOut:
     item = _build_item(listing)
-    _attach_complex_comparison(db, get_settings(), [listing], [item], listing.deal_type)
+    settings = get_settings()
+    _attach_complex_comparison(db, settings, [listing], [item], listing.deal_type)
+    _attach_rental_yield(db, settings, [listing], [item], listing.deal_type)
     return item

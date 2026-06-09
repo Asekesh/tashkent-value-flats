@@ -60,10 +60,12 @@ class Estimate:
 
 @dataclass
 class MarketIndex:
-    """Предрассчитанные медианы по активной базе.
+    """Предрассчитанные медианы по активной базе одного типа сделки.
 
-    Используется и `/listings`, и `/listings/stats`, чтобы числа на дашборде и
-    в списке считались по одной формуле. Ключ включает сегмент (новостройка/
+    Историческая заметка: раньше этот индекс питал и `/listings`, и
+    `/listings/stats`. Сейчас фид/статистика читают кэш-столбцы листинга
+    (см. [market_estimate.compute_and_store]); индекс остался для ad-hoc
+    оценки `/api/market/estimate`. Ключ включает сегмент (новостройка/
     вторичка): хрущёвки и новостройки в одном районе — разные рынки,
     смешивание их медиан даёт ложные «-50% от рынка» на старом фонде.
     """
@@ -74,9 +76,9 @@ class MarketIndex:
     district_rooms: dict[tuple[str, int, str], tuple[float, int]] = field(default_factory=dict)
 
 
-def _robust_price(values: list[float], min_samples: int) -> float | None:
+def _robust_price(values: list[float], min_samples: int, deal_type: str = "sale") -> float | None:
     """Trimmed median с sanity-check. Возвращает None если данных мало
-    или результат выпал из разумных границ для Ташкента."""
+    или результат выпал из разумных границ для Ташкента (свои у аренды)."""
     if len(values) < min_samples:
         return None
     sorted_vals = sorted(values)
@@ -84,13 +86,18 @@ def _robust_price(values: list[float], min_samples: int) -> float | None:
         trim = len(sorted_vals) // 10
         sorted_vals = sorted_vals[trim : len(sorted_vals) - trim]
     price = float(median(sorted_vals))
-    if not (MARKET_PRICE_MIN_USD_PER_M2 <= price <= MARKET_PRICE_MAX_USD_PER_M2):
+    lo, hi = market_price_bounds(deal_type)
+    if not (lo <= price <= hi):
         return None
     return price
 
 
-def build_market_index(db: Session) -> MarketIndex:
+def build_market_index(db: Session, deal_type: str = "sale") -> MarketIndex:
+    """Предрассчитанные медианы для одного типа сделки. Аренда и продажа —
+    разные рынки и разный масштаб цены/м², поэтому индекс строится отдельно
+    под каждый deal_type (дефолт sale — поведение прежних вызовов не меняется)."""
     settings = get_settings()
+    min_price_usd, min_ppm = settings.price_floors(deal_type)
     rows = db.execute(
         select(
             Listing.district,
@@ -104,11 +111,12 @@ def build_market_index(db: Session) -> MarketIndex:
             Listing.total_floors,
         ).where(
             Listing.status == "active",
-            Listing.deal_type == "sale",  # глобальный индекс — только продажа (аренда считается отдельно)
-            Listing.price_usd >= settings.min_listing_price_usd,
-            Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
+            Listing.deal_type == deal_type,  # индекс одного рынка: аренда и продажа считаются раздельно
+            Listing.price_usd >= min_price_usd,
+            Listing.price_per_m2_usd >= min_ppm,
         )
     ).all()
+    raw_lo, raw_hi = market_price_bounds(deal_type)
     building_room_groups: dict[tuple[str, int, str], list[float]] = defaultdict(list)
     district_room_groups: dict[tuple[str, int, str], list[float]] = defaultdict(list)
     for row in rows:
@@ -117,7 +125,7 @@ def build_market_index(db: Session) -> MarketIndex:
         # Отсекаем выбросы на уровне сырых данных, чтобы они даже не попадали
         # в выборку для медианы. $32k/м² в одном объявлении — это либо опечатка,
         # либо стартовая цена для торга, не рынок.
-        if not (MARKET_PRICE_MIN_USD_PER_M2 <= row.price_per_m2_usd <= MARKET_PRICE_MAX_USD_PER_M2):
+        if not (raw_lo <= row.price_per_m2_usd <= raw_hi):
             continue
         # Крайние этажи (1-й и последний) системно дешевле на 15-25%. Если
         # оставить их в базе — медиана уезжает вниз, и обычные квартиры
@@ -132,13 +140,13 @@ def build_market_index(db: Session) -> MarketIndex:
 
     building_rooms: dict[tuple[str, int, str], tuple[float, int]] = {}
     for key, values in building_room_groups.items():
-        price = _robust_price(values, MIN_BUILDING_ROOM_SAMPLES)
+        price = _robust_price(values, MIN_BUILDING_ROOM_SAMPLES, deal_type)
         if price is not None:
             building_rooms[key] = (price, len(values))
 
     district_rooms: dict[tuple[str, int, str], tuple[float, int]] = {}
     for key, values in district_room_groups.items():
-        price = _robust_price(values, MIN_DISTRICT_ROOM_SAMPLES)
+        price = _robust_price(values, MIN_DISTRICT_ROOM_SAMPLES, deal_type)
         if price is not None:
             district_rooms[key] = (price, len(values))
 
@@ -219,10 +227,12 @@ def estimate_market(
     segment: str | None = None,
     floor: int | None = None,
     total_floors: int | None = None,
+    deal_type: str = "sale",
     exclude_listing_id: int | None = None,  # noqa: ARG001 — оставлено для совместимости вызовов
 ) -> Estimate:
-    """Оценка для одного объявления — использует тот же индекс, что и листинг/статистика."""
-    index = build_market_index(db)
+    """Оценка для одного объявления — строит индекс соответствующего рынка
+    (продажа/аренда раздельно; дефолт sale сохраняет прежнее поведение)."""
+    index = build_market_index(db, deal_type)
     return estimate_from_index(
         index,
         building_key=building_key,

@@ -945,6 +945,10 @@ button:disabled {
   margin-bottom: var(--sp-4);
 }
 
+.chip[hidden] {
+  display: none; /* .chip display:inline-flex иначе перебивает атрибут hidden */
+}
+
 .chip,
 .rank {
   align-items: center;
@@ -984,6 +988,25 @@ button:disabled {
 .chip.success {
   background: #dcfce7;
   color: #15803d;
+}
+
+/* Кнопка-раскрывашка доходности: спрятана под клик (задел под платную фичу). */
+.chip.chip-reveal {
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chip.chip-reveal:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-body);
+}
+
+.chip.chip-reveal:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .listing-body h3 {
