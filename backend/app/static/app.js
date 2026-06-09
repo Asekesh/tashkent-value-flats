@@ -15,7 +15,6 @@ const defaultFilters = {
   source: "",
   residential_complex: "",
   seller_type: "",
-  is_furnished: "",
   sort: "discount",
 };
 
@@ -88,14 +87,12 @@ document.querySelectorAll(".deal-toggle-btn").forEach((btn) => {
     });
     goal(`deal_${deal}`);
     state.selectedId = null;
-    applyDealTypeUI();
     fetchDashboardStats();
     fetchListings(readFilters(), 0);
   });
 });
 document.querySelector("#resetButton").addEventListener("click", resetFilters);
 document.querySelector("#seller_type").addEventListener("change", () => fetchListings(readFilters(), 0));
-document.querySelector("#is_furnished").addEventListener("change", () => fetchListings(readFilters(), 0));
 document.querySelector("#refreshRunsButton").addEventListener("click", fetchTasks);
 document.querySelector("#refreshSourcePagesButton").addEventListener("click", fetchSourceStats);
 document.querySelector("#feedbackNav").addEventListener("click", () => { goal("feedback_open"); showFeedbackModal(); });
@@ -328,11 +325,6 @@ function priceSfx() {
 }
 function ppmUnit() {
   return isRent() ? "/м²/мес" : "/м²";
-}
-// Фильтр «С мебелью» имеет смысл только в аренде (на продаже мебель=NULL).
-function applyDealTypeUI() {
-  const furnished = document.querySelector("#furnishedField");
-  if (furnished) furnished.hidden = !isRent();
 }
 
 async function fetchListings(filters = readFilters(), page = 0) {
@@ -1468,8 +1460,6 @@ function readFilters() {
     // Тумблер «Без комиссии» — чекбокс: вкл → seller_type=owner, выкл → пусто.
     // На бэке owner расширяется до «собственник ИЛИ commission_pct=0» (см. api/listings).
     if (id === "seller_type") return [id, document.querySelector("#seller_type").checked ? "owner" : ""];
-    // «С мебелью» — только аренда: на продаже мебель=NULL, иначе выдача обнулится.
-    if (id === "is_furnished") return [id, (isRent() && document.querySelector("#is_furnished").checked) ? "true" : ""];
     return [id, document.querySelector(`#${id}`).value];
   }));
 }
@@ -1481,8 +1471,6 @@ function writeFilters(filters) {
       districtMulti.setValue(value);
     } else if (id === "seller_type") {
       document.querySelector("#seller_type").checked = value === "owner";
-    } else if (id === "is_furnished") {
-      document.querySelector("#is_furnished").checked = value === "true";
     } else {
       document.querySelector(`#${id}`).value = value;
     }
