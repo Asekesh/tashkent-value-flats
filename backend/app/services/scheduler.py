@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from datetime import datetime, timedelta
 
 from app.core.config import get_settings
@@ -14,12 +15,19 @@ from app.services.scrape import expand_with_rent, resolve_live_sources, run_scra
 from app.services.seller_classifier import classify_sellers_by_volume
 from sqlalchemy import func, select
 
+logger = logging.getLogger("app.scheduler")
+
 
 async def scheduled_scrape_loop() -> None:
     settings = get_settings()
     interval_seconds = max(1, settings.scrape_interval_minutes) * 60
     while True:
-        await asyncio.to_thread(_run_once)
+        # Транзиентный сбой (полный диск, обрыв БД) НЕ должен убивать цикл:
+        # без этого try одно упавшее _run_once гасит весь скрейп до рестарта.
+        try:
+            await asyncio.to_thread(_run_once)
+        except Exception:  # noqa: BLE001 — логируем и продолжаем по таймеру
+            logger.exception("scheduled scrape cycle failed; продолжаю по таймеру")
         await asyncio.sleep(interval_seconds)
 
 
@@ -62,49 +70,57 @@ def _run_once() -> None:
     if not scrape_progress.start(mode=mode, sources=sources):
         return
 
-    with SessionLocal() as db:
-        task = ScrapeTask(
-            status="running",
-            trigger="auto",
-            mode=mode,
-            sources=",".join(sources),
-            current_source=sources[0],
-        )
-        db.add(task)
-        db.commit()
-        db.refresh(task)
-        task_id = task.id
-        scrape_progress.set_task_id(task_id)
-
-        final_status = "success"
-        error: str | None = None
-        try:
-            for source_name in sources:
-                if scrape_progress.is_stop_requested():
-                    final_status = "stopped"
-                    break
-                task.current_source = source_name
-                db.commit()
-                run_scrape_for_source(db, source_name, mode=mode, trigger="auto")
-            else:
-                if scrape_progress.is_stop_requested():
-                    final_status = "stopped"
-            classify_sellers_by_volume(db)  # agent/owner по объёму после цикла
-        except Exception as exc:  # pragma: no cover - defensive
-            final_status = "failed"
-            error = str(exc)
-        finally:
-            task.status = final_status
-            task.error = error
-            task.finished_at = datetime.utcnow()
-            task.current_source = None
-            state = scrape_progress.get_state()
-            task.pages_scanned = state.get("pages_scanned", 0)
-            task.found_count = state.get("found_total", 0)
-            task.new_count = state.get("new_total", 0)
-            task.updated_count = state.get("updated_total", 0)
+    # С этого момента scrape_progress в состоянии «running» — finish() обязателен
+    # в ЛЮБОМ исходе, иначе следующий цикл навсегда упрётся в start()==False
+    # (так и случилось при полном диске: commit ниже падал ДО старого try).
+    error: str | None = None
+    try:
+        with SessionLocal() as db:
+            task = ScrapeTask(
+                status="running",
+                trigger="auto",
+                mode=mode,
+                sources=",".join(sources),
+                current_source=sources[0],
+            )
+            db.add(task)
             db.commit()
-            scrape_progress.finish(error=error)
+            db.refresh(task)
+            task_id = task.id
+            scrape_progress.set_task_id(task_id)
+
+            final_status = "success"
+            try:
+                for source_name in sources:
+                    if scrape_progress.is_stop_requested():
+                        final_status = "stopped"
+                        break
+                    task.current_source = source_name
+                    db.commit()
+                    run_scrape_for_source(db, source_name, mode=mode, trigger="auto")
+                else:
+                    if scrape_progress.is_stop_requested():
+                        final_status = "stopped"
+                classify_sellers_by_volume(db)  # agent/owner по объёму после цикла
+            except Exception as exc:  # pragma: no cover - defensive
+                final_status = "failed"
+                error = str(exc)
+            finally:
+                task.status = final_status
+                task.error = error
+                task.finished_at = datetime.utcnow()
+                task.current_source = None
+                state = scrape_progress.get_state()
+                task.pages_scanned = state.get("pages_scanned", 0)
+                task.found_count = state.get("found_total", 0)
+                task.new_count = state.get("new_total", 0)
+                task.updated_count = state.get("updated_total", 0)
+                db.commit()
+    except Exception as exc:  # сбой ещё до/во время bookkeeping (полный диск и т.п.)
+        error = error or str(exc)
+        logger.exception("scrape cycle aborted before task bookkeeping")
+    finally:
+        scrape_progress.finish(error=error)
 
 
 async def stop_scheduler(task: asyncio.Task | None) -> None:

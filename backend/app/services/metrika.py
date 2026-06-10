@@ -29,7 +29,7 @@ def _request(client: httpx.Client, token: str, counter: str, params: dict[str, s
         _API,
         params={"ids": counter, **params},
         headers={"Authorization": f"OAuth {token}"},
-        timeout=8.0,
+        timeout=15.0,
     )
     resp.raise_for_status()
     return resp.json()
