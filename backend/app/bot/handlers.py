@@ -16,7 +16,7 @@ from app.bot.keyboards import (
     AREA_VALUES,
     DISCOUNT_PRESETS,
     FLOOR_VALUES,
-    PRICE_VALUES,
+    price_values,
     alert_actions,
     area_from_keyboard,
     area_to_keyboard,
@@ -432,7 +432,8 @@ async def on_price_min(cb: CallbackQuery, state: FSMContext) -> None:
         idx = None
     else:
         idx = int(payload)
-        await state.update_data(price_min=float(PRICE_VALUES[idx]), price_min_idx=idx)
+        prices = price_values(data.get("deal_type", "sale"))
+        await state.update_data(price_min=float(prices[idx]), price_min_idx=idx)
     await cb.message.edit_text(
         t("step_price_max", lang),
         reply_markup=price_to_keyboard(idx, lang, data.get("deal_type", "sale")),
@@ -448,7 +449,8 @@ async def on_price_max(cb: CallbackQuery, state: FSMContext) -> None:
     if payload == "any":
         await state.update_data(price_max=None)
     else:
-        await state.update_data(price_max=float(PRICE_VALUES[int(payload)]))
+        prices = price_values(data.get("deal_type", "sale"))
+        await state.update_data(price_max=float(prices[int(payload)]))
     await state.set_state(NewAlert.area)
     await cb.message.edit_text(
         t("step_area_min", lang),

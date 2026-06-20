@@ -96,8 +96,12 @@ PRICE_VALUES: list[int] = [
 PRICE_VALUES_RENT: list[int] = [200, 300, 400, 500, 700, 1000, 1500, 2000, 3000]
 
 
-def _price_values(deal_type: str) -> list[int]:
+def price_values(deal_type: str) -> list[int]:
+    """Набор ценовых пресетов по типу сделки. Хендлеры резолвят индекс кнопки
+    в сумму через тот же набор, что и клавиатура — иначе rent сохранил бы sale-цену."""
     return PRICE_VALUES_RENT if deal_type == "rent" else PRICE_VALUES
+
+
 AREA_VALUES: list[int] = [20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150, 200]
 
 
@@ -126,11 +130,11 @@ def _bounds_keyboard(
 
 
 def price_from_keyboard(lang: str = DEFAULT_LANG, deal_type: str = "sale") -> InlineKeyboardMarkup:
-    return _bounds_keyboard("pmin", _price_values(deal_type), fmt_price, t("b_unimportant", lang))
+    return _bounds_keyboard("pmin", price_values(deal_type), fmt_price, t("b_unimportant", lang))
 
 
 def price_to_keyboard(min_idx: int | None, lang: str = DEFAULT_LANG, deal_type: str = "sale") -> InlineKeyboardMarkup:
-    return _bounds_keyboard("pmax", _price_values(deal_type), fmt_price, t("b_no_upper", lang), only_after=min_idx)
+    return _bounds_keyboard("pmax", price_values(deal_type), fmt_price, t("b_no_upper", lang), only_after=min_idx)
 
 
 def area_from_keyboard(lang: str = DEFAULT_LANG) -> InlineKeyboardMarkup:
