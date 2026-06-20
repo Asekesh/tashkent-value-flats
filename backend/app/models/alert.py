@@ -33,6 +33,12 @@ class Alert(Base):
     floor_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     floor_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     sources: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    # --- Раздел «Аренда». deal_type='sale' (дефолт) — обычный алёрт на покупку.
+    deal_type: Mapped[str] = mapped_column(
+        String(16), default="sale", server_default="sale", index=True
+    )
+    # Фильтр аренды: True = только без комиссии, NULL = неважно. Для sale всегда NULL.
+    no_commission: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
