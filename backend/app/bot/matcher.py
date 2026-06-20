@@ -15,6 +15,10 @@ def alert_matches_listing(alert: Alert, listing: Listing) -> bool:
     if not alert.is_active:
         return False
 
+    # Стенка типа сделки: rent-листинг не должен попадать в sale-алёрт и наоборот.
+    if (listing.deal_type or "sale") != (alert.deal_type or "sale"):
+        return False
+
     districts = _csv_list(alert.districts)
     if districts and listing.district not in districts:
         return False
@@ -52,6 +56,11 @@ def alert_matches_listing(alert: Alert, listing: Listing) -> bool:
         return False
     if alert.floor_max is not None and (listing.floor or 0) > alert.floor_max:
         return False
+
+    # Фильтр аренды «без комиссии»: NULL комиссия = неизвестно, не проходит.
+    if alert.no_commission:
+        if listing.commission_pct is None or float(listing.commission_pct) != 0:
+            return False
 
     return True
 
