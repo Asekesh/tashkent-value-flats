@@ -91,7 +91,7 @@ def _process_batch(cursor: int) -> int:
             listing = listings.get(ev.listing_id)
             if listing is None or listing.status != "active":
                 continue
-            if (listing.price_usd or 0) < settings.min_listing_price_usd:
+            if (listing.deal_type or "sale") == "sale" and (listing.price_usd or 0) < settings.min_listing_price_usd:
                 continue
             for user_id, user_alerts in alerts_by_user.items():
                 user = users.get(user_id)
@@ -143,12 +143,19 @@ def _send_listing_sync(
 ) -> None:
     short_district = (listing.district or "").replace("ский район", "").replace(" район", "")
     title = (listing.title or "")[:120]
-    price = f"${int(listing.price_usd or 0):,}".replace(",", " ")
     ppm = int(listing.price_per_m2_usd or 0)
     rooms_suffix = "к" if normalize_lang(lang) == "ru" else " xona"
-    discount = ""
-    if listing.discount_percent is not None and listing.discount_percent > 0:
-        discount = "\n" + t("n_below_market", lang, pct=int(listing.discount_percent))
+    is_rent = (listing.deal_type or "sale") == "rent"
+    if is_rent:
+        price = f"${int(listing.price_usd or 0):,}".replace(",", " ") + t("n_per_month", lang)
+        extra = ""
+        if listing.commission_pct is not None and float(listing.commission_pct) == 0:
+            extra = "\n" + t("n_no_commission", lang)
+    else:
+        price = f"${int(listing.price_usd or 0):,}".replace(",", " ")
+        extra = ""
+        if listing.discount_percent is not None and listing.discount_percent > 0:
+            extra = "\n" + t("n_below_market", lang, pct=int(listing.discount_percent))
 
     # Ссылку-трекер /r/{token} кладём прямо в текст (а не в inline-кнопку):
     # кнопка заставляла Telegram показывать экран-подтверждение перехода.
@@ -159,7 +166,7 @@ def _send_listing_sync(
         f"<b>{title}</b>\n\n"
         f"💰 {price} · 📐 {ppm}$/м² · 📏 {int(listing.area_m2 or 0)} м² · 🛏 {listing.rooms}{rooms_suffix}\n"
         f"📍 {short_district}"
-        f"{discount}\n\n"
+        f"{extra}\n\n"
         f'🔎 <a href="{click_url}">{t("n_view", lang)}</a>'
     )
 
