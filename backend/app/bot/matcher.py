@@ -67,6 +67,8 @@ def alert_matches_listing(alert: Alert, listing: Listing) -> bool:
 
 def describe_alert(alert: Alert, lang: str = DEFAULT_LANG) -> str:
     parts: list[str] = []
+    deal_key = "da_deal_rent" if (alert.deal_type or "sale") == "rent" else "da_deal_sale"
+    parts.append(t(deal_key, lang))
     districts = _csv_list(alert.districts)
     if districts:
         parts.append("📍 " + ", ".join(d.replace("ский район", "").replace(" район", "") for d in districts))
@@ -80,9 +82,10 @@ def describe_alert(alert: Alert, lang: str = DEFAULT_LANG) -> str:
         parts.append("🛏 " + "/".join(rooms) + suffix)
 
     if alert.price_min is not None or alert.price_max is not None:
+        suffix = t("n_per_month", lang) if (alert.deal_type or "sale") == "rent" else ""
         lo = f"${int(alert.price_min):,}" if alert.price_min else "—"
         hi = f"${int(alert.price_max):,}" if alert.price_max else "—"
-        parts.append(f"💰 {lo}…{hi}")
+        parts.append(f"💰 {lo}…{hi}{suffix}")
 
     if alert.ppm_min is not None or alert.ppm_max is not None:
         lo = f"${int(alert.ppm_min)}" if alert.ppm_min else "—"
@@ -99,7 +102,10 @@ def describe_alert(alert: Alert, lang: str = DEFAULT_LANG) -> str:
         hi = str(int(alert.floor_max)) if alert.floor_max else "—"
         parts.append(f"🏢 {t('da_floor', lang)} {lo}…{hi}")
 
-    if alert.discount_min is not None:
+    if (alert.deal_type or "sale") == "rent":
+        if alert.no_commission:
+            parts.append(t("da_no_commission", lang))
+    elif alert.discount_min is not None:
         parts.append("🎯 " + t("da_discount", lang, pct=int(alert.discount_min * 100)))
 
     return "\n".join(parts)

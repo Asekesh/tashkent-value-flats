@@ -1,4 +1,4 @@
-from app.bot.matcher import alert_matches_listing
+from app.bot.matcher import alert_matches_listing, describe_alert
 from app.models import Alert, Listing
 
 
@@ -61,3 +61,18 @@ def test_no_commission_none_ignores_commission():
     alert = _alert(deal_type="rent", no_commission=None)
     listing = _listing(deal_type="rent", commission_pct=50.0)
     assert alert_matches_listing(alert, listing) is True
+
+
+def test_describe_rent_alert_shows_type_and_month():
+    a = Alert(name="a", deal_type="rent", price_max=700.0, no_commission=True)
+    out = describe_alert(a, "ru")
+    assert "Аренда" in out
+    assert "/мес" in out
+    assert "без комиссии" in out
+
+
+def test_describe_sale_alert_unchanged():
+    a = Alert(name="a", deal_type="sale", price_max=50000.0)
+    out = describe_alert(a, "ru")
+    assert "Продажа" in out
+    assert "/мес" not in out
