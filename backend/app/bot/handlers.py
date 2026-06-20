@@ -20,6 +20,8 @@ from app.bot.keyboards import (
     alert_actions,
     area_from_keyboard,
     area_to_keyboard,
+    commission_keyboard,
+    deal_type_keyboard,
     discount_keyboard,
     districts_keyboard,
     feedback_kind_keyboard,
@@ -254,11 +256,11 @@ async def _begin_new_alert(msg: Message, user, state: FSMContext) -> None:
         language_code=getattr(user, "language_code", None),
     )
     await state.clear()
-    await state.set_state(NewAlert.districts)
-    await state.update_data(districts=set(), lang=lang)
+    await state.set_state(NewAlert.deal_type)
+    await state.update_data(districts=set(), deal_type="sale", lang=lang)
     await msg.answer(
-        t("step_districts", lang),
-        reply_markup=districts_keyboard(set(), lang),
+        t("step_deal_type", lang),
+        reply_markup=deal_type_keyboard("sale", lang),
     )
 
 
@@ -293,6 +295,8 @@ async def on_edit(cb: CallbackQuery, state: FSMContext) -> None:
             floor_min=alert.floor_min,
             floor_max=alert.floor_max,
             discount_min=alert.discount_min,
+            deal_type=alert.deal_type,
+            no_commission=alert.no_commission,
         )
 
     await state.clear()
@@ -326,6 +330,25 @@ async def start_help(cb: CallbackQuery) -> None:
         language_code=cb.from_user.language_code,
     )
     await cb.message.answer(t("help", lang), reply_markup=main_menu(lang))
+    await cb.answer()
+
+
+@router.callback_query(NewAlert.deal_type, F.data.startswith("deal:"))
+async def on_deal_type(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
+    if payload == "done":
+        await state.set_state(NewAlert.districts)
+        await cb.message.edit_text(
+            t("step_districts", lang),
+            reply_markup=districts_keyboard(set(data.get("districts") or set()), lang),
+        )
+        await cb.answer()
+        return
+    # payload = sale | rent — переключаем галочку
+    await state.update_data(deal_type=payload)
+    await cb.message.edit_reply_markup(reply_markup=deal_type_keyboard(payload, lang))
     await cb.answer()
 
 
@@ -382,7 +405,7 @@ async def on_rooms(cb: CallbackQuery, state: FSMContext) -> None:
         await state.set_state(NewAlert.price)
         await cb.message.edit_text(
             t("step_price_min", lang),
-            reply_markup=price_from_keyboard(lang),
+            reply_markup=price_from_keyboard(lang, data.get("deal_type", "sale")),
         )
         await cb.answer()
         return
@@ -412,7 +435,7 @@ async def on_price_min(cb: CallbackQuery, state: FSMContext) -> None:
         await state.update_data(price_min=float(PRICE_VALUES[idx]), price_min_idx=idx)
     await cb.message.edit_text(
         t("step_price_max", lang),
-        reply_markup=price_to_keyboard(idx, lang),
+        reply_markup=price_to_keyboard(idx, lang, data.get("deal_type", "sale")),
     )
     await cb.answer()
 
@@ -500,11 +523,18 @@ async def on_floor_max(cb: CallbackQuery, state: FSMContext) -> None:
         await state.update_data(floor_max=None)
     else:
         await state.update_data(floor_max=FLOOR_VALUES[int(payload)])
-    await state.set_state(NewAlert.discount)
-    await cb.message.edit_text(
-        t("step_discount", lang),
-        reply_markup=discount_keyboard(lang),
-    )
+    if data.get("deal_type") == "rent":
+        await state.set_state(NewAlert.commission)
+        await cb.message.edit_text(
+            t("step_commission", lang),
+            reply_markup=commission_keyboard(lang),
+        )
+    else:
+        await state.set_state(NewAlert.discount)
+        await cb.message.edit_text(
+            t("step_discount", lang),
+            reply_markup=discount_keyboard(lang),
+        )
     await cb.answer()
 
 
@@ -520,6 +550,17 @@ async def on_discount(cb: CallbackQuery, state: FSMContext) -> None:
     else:
         _, frac = DISCOUNT_PRESETS[int(payload)]
         await state.update_data(discount_min=frac)
+    await state.set_state(NewAlert.name)
+    await cb.message.edit_text(t("step_name", lang))
+    await cb.answer()
+
+
+@router.callback_query(NewAlert.commission, F.data.startswith("comm:"))
+async def on_commission(cb: CallbackQuery, state: FSMContext) -> None:
+    payload = cb.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = normalize_lang(data.get("lang"))
+    await state.update_data(no_commission=True if payload == "yes" else None)
     await state.set_state(NewAlert.name)
     await cb.message.edit_text(t("step_name", lang))
     await cb.answer()
@@ -547,6 +588,8 @@ async def set_name(msg: Message, state: FSMContext) -> None:
         floor_min=data.get("floor_min"),
         floor_max=data.get("floor_max"),
         discount_min=data.get("discount_min"),
+        deal_type=data.get("deal_type", "sale"),
+        no_commission=data.get("no_commission"),
     )
 
     with SessionLocal() as db:
