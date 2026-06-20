@@ -91,6 +91,13 @@ PRICE_VALUES: list[int] = [
     20_000, 30_000, 40_000, 50_000, 60_000, 70_000,
     85_000, 100_000, 120_000, 150_000, 200_000, 300_000,
 ]
+
+# Помесячные пресеты для аренды ($/мес). Отдельный набор — масштаб иной, чем sale.
+PRICE_VALUES_RENT: list[int] = [200, 300, 400, 500, 700, 1000, 1500, 2000, 3000]
+
+
+def _price_values(deal_type: str) -> list[int]:
+    return PRICE_VALUES_RENT if deal_type == "rent" else PRICE_VALUES
 AREA_VALUES: list[int] = [20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150, 200]
 
 
@@ -118,12 +125,12 @@ def _bounds_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def price_from_keyboard(lang: str = DEFAULT_LANG) -> InlineKeyboardMarkup:
-    return _bounds_keyboard("pmin", PRICE_VALUES, fmt_price, t("b_unimportant", lang))
+def price_from_keyboard(lang: str = DEFAULT_LANG, deal_type: str = "sale") -> InlineKeyboardMarkup:
+    return _bounds_keyboard("pmin", _price_values(deal_type), fmt_price, t("b_unimportant", lang))
 
 
-def price_to_keyboard(min_idx: int | None, lang: str = DEFAULT_LANG) -> InlineKeyboardMarkup:
-    return _bounds_keyboard("pmax", PRICE_VALUES, fmt_price, t("b_no_upper", lang), only_after=min_idx)
+def price_to_keyboard(min_idx: int | None, lang: str = DEFAULT_LANG, deal_type: str = "sale") -> InlineKeyboardMarkup:
+    return _bounds_keyboard("pmax", _price_values(deal_type), fmt_price, t("b_no_upper", lang), only_after=min_idx)
 
 
 def area_from_keyboard(lang: str = DEFAULT_LANG) -> InlineKeyboardMarkup:
@@ -176,6 +183,27 @@ def _preset_keyboard(prefix: str, labels: list[str], any_label: str, per_row: in
 
 def discount_keyboard(lang: str = DEFAULT_LANG) -> InlineKeyboardMarkup:
     return _preset_keyboard("disc", [p[0] for p in DISCOUNT_PRESETS], t("b_any_discount", lang), per_row=3)
+
+
+def deal_type_keyboard(selected: str = "sale", lang: str = DEFAULT_LANG) -> InlineKeyboardMarkup:
+    """Тумблер Продажа/Аренда с галочкой у выбранного + кнопка «Готово»."""
+    def mark(code: str, label: str) -> str:
+        return ("✓ " + label) if selected == code else label
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=mark("sale", t("b_deal_sale", lang)), callback_data="deal:sale"),
+            InlineKeyboardButton(text=mark("rent", t("b_deal_rent", lang)), callback_data="deal:rent"),
+        ],
+        [InlineKeyboardButton(text=t("b_done", lang), callback_data="deal:done")],
+    ])
+
+
+def commission_keyboard(lang: str = DEFAULT_LANG) -> InlineKeyboardMarkup:
+    """Шаг аренды: без комиссии / неважно."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=t("b_no_commission", lang), callback_data="comm:yes"),
+        InlineKeyboardButton(text=t("b_unimportant", lang), callback_data="comm:any"),
+    ]])
 
 
 def alert_actions(alert_id: int, is_active: bool, lang: str = DEFAULT_LANG) -> InlineKeyboardMarkup:
