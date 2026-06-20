@@ -261,4 +261,21 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "🔎 Смотреть объявление →",
         "uz": "🔎 E'lonni ko'rish →",
     },
+    # ---------- Шаг deal_type / комиссия (rent flow) ----------
+    "step_deal_type": {
+        "ru": "Что ищем — купить или снять?",
+        "uz": "Nima qidiramiz — sotib olishmi yoki ijaraga olishmi?",
+    },
+    "b_deal_sale": {"ru": "🏠 Купить", "uz": "🏠 Sotib olish"},
+    "b_deal_rent": {"ru": "🔑 Снять", "uz": "🔑 Ijara"},
+    "step_commission": {
+        "ru": "Комиссия риелтора?",
+        "uz": "Rieltor komissiyasi?",
+    },
+    "b_no_commission": {"ru": "Без комиссии", "uz": "Komissiyasiz"},
+    "da_deal_sale": {"ru": "🏷 Продажа", "uz": "🏷 Sotuv"},
+    "da_deal_rent": {"ru": "🏷 Аренда", "uz": "🏷 Ijara"},
+    "da_no_commission": {"ru": "✅ без комиссии", "uz": "✅ komissiyasiz"},
+    "n_per_month": {"ru": "/мес", "uz": "/oy"},
+    "n_no_commission": {"ru": "✅ без комиссии", "uz": "✅ komissiyasiz"},
 }
