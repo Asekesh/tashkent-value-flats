@@ -50,11 +50,11 @@ TEXTS: dict[str, dict[str, str]] = {
     # ---------- /start, /help ----------
     "help": {
         "ru": (
-            "🤖 Бот следит за новыми объявлениями по Ташкенту и шлёт вам уведомления, "
-            "как только появится подходящая квартира.\n\n"
+            "🤖 Бот следит за новыми объявлениями по Ташкенту — на продажу и в аренду — "
+            "и шлёт вам уведомления, как только появится подходящая квартира.\n\n"
             "<b>Как пользоваться:</b>\n"
             "1️⃣ Нажмите <b>«➕ Новое уведомление»</b> и за пару шагов задайте фильтр "
-            "(район, комнаты, цена…).\n"
+            "(продажа или аренда, район, комнаты, цена…).\n"
             "2️⃣ Бот сам пришлёт сообщение, когда найдётся квартира под ваш фильтр.\n"
             "3️⃣ В <b>«📋 Мои уведомления»</b> можно поставить на паузу или удалить.\n\n"
             "<b>Команды:</b>\n"
@@ -63,11 +63,11 @@ TEXTS: dict[str, dict[str, str]] = {
             "/help — помощь"
         ),
         "uz": (
-            "🤖 Bot Toshkent bo'yicha yangi e'lonlarni kuzatadi va mos kvartira "
-            "paydo bo'lishi bilanoq sizga xabar yuboradi.\n\n"
+            "🤖 Bot Toshkent bo'yicha yangi e'lonlarni — sotuv va ijara — kuzatadi va "
+            "mos kvartira paydo bo'lishi bilanoq sizga xabar yuboradi.\n\n"
             "<b>Qanday foydalaniladi:</b>\n"
             "1️⃣ <b>«➕ Yangi bildirishnoma»</b> tugmasini bosing va bir necha qadamda "
-            "filtr belgilang (tuman, xonalar, narx…).\n"
+            "filtr belgilang (sotuv yoki ijara, tuman, xonalar, narx…).\n"
             "2️⃣ Filtringizga mos kvartira topilsa, bot o'zi xabar yuboradi.\n"
             "3️⃣ <b>«📋 Mening bildirishnomalarim»</b> bo'limida pauza qilish yoki "
             "o'chirish mumkin.\n\n"
@@ -80,22 +80,38 @@ TEXTS: dict[str, dict[str, str]] = {
     "welcome": {
         "ru": (
             "Привет! 👋\n\n"
-            "Я собираю объявления о квартирах в Ташкенте сразу с трёх площадок — "
-            "<b>OLX, Uybor и Realt24</b> — и присылаю уведомление, как только появится "
-            "вариант под ваш фильтр.\n\n"
+            "Я собираю объявления о квартирах в Ташкенте — <b>на продажу и в аренду</b> — "
+            "сразу с трёх площадок (OLX, Uybor, Realt24) и присылаю уведомление, как "
+            "только появится вариант под ваш фильтр.\n\n"
             "Просто нажмите кнопку ниже — настроим за минуту 👇"
         ),
         "uz": (
             "Salom! 👋\n\n"
-            "Men Toshkentdagi kvartira e'lonlarini bir vaqtda uch saytdan to'playman — "
-            "<b>OLX, Uybor va Realt24</b> — va filtringizga mos variant chiqishi bilanoq "
-            "xabar yuboraman.\n\n"
+            "Men Toshkentdagi kvartira e'lonlarini — <b>sotuv va ijara</b> — bir vaqtda "
+            "uch saytdan to'playman (OLX, Uybor, Realt24) va filtringizga mos variant "
+            "chiqishi bilanoq xabar yuboraman.\n\n"
             "Quyidagi tugmani bosing — bir daqiqada sozlaymiz 👇"
         ),
     },
     "choose_action": {
         "ru": "Что хотите сделать?",
         "uz": "Nima qilmoqchisiz?",
+    },
+    # ---------- Разовый анонс раздела «Аренда» (скрипт announce_rent) ----------
+    "announce_rent": {
+        "ru": (
+            "🔑 <b>Теперь есть уведомления об аренде!</b>\n\n"
+            "Бот ищет квартиры не только на продажу, но и в аренду — можно "
+            "с фильтром «без комиссии».\n\n"
+            "Нажмите «➕ Новое уведомление» и выберите «Снять» на первом шаге."
+        ),
+        "uz": (
+            "🔑 <b>Endi ijara bo'yicha bildirishnomalar bor!</b>\n\n"
+            "Bot kvartiralarni nafaqat sotuvga, balki ijaraga ham qidiradi — "
+            "«komissiyasiz» filtri bilan.\n\n"
+            "«➕ Yangi bildirishnoma» tugmasini bosing va birinchi qadamda "
+            "«Ijara»ni tanlang."
+        ),
     },
     # ---------- Обратная связь ----------
     "feedback_intro": {
