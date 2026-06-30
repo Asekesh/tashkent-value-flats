@@ -40,6 +40,27 @@ def _seed(db):
     db.commit()
 
 
+def _mk_rent(db, i, district, rooms, *, price_usd, status="active"):
+    db.add(
+        Listing(
+            source="uybor", source_id=f"r{i}", url=f"https://uybor.uz/{i}",
+            title=f"Аренда {i}", price=price_usd, currency="USD",
+            price_usd=price_usd, area_m2=50.0, price_per_m2_usd=price_usd / 50.0,
+            rooms=rooms, district=district, address_raw="ул. Тестовая 2",
+            duplicate_group_key=f"rg{i}", status=status,
+            deal_type="rent", price_period="month",
+            is_below_market=True, discount_percent=15.0,
+        )
+    )
+
+
+def _seed_rent(db):
+    # Чиланзар аренда: 3 активных (2,2,3) по $300/$400/$600 в мес.
+    for i, (rooms, price) in enumerate([(2, 300.0), (2, 400.0), (3, 600.0)]):
+        _mk_rent(db, i, CHILANZAR, rooms, price_usd=price)
+    db.commit()
+
+
 def test_slug_roundtrip():
     assert district_slug(CHILANZAR) == "chilanzar"
     assert district_from_slug("chilanzar") == CHILANZAR
@@ -92,6 +113,39 @@ def test_empty_combo_404(client, db_session):
     _seed(db_session)
     # В Чиланзаре нет 9-комнатных.
     assert client.get("/kvartira/chilanzar/9-komnatnye").status_code == 404
+
+
+def test_load_hub_sale_unchanged(db_session):
+    from app.core.config import get_settings
+    from app.seo import service
+    _seed(db_session)
+    data = service.load_hub(db_session, get_settings(), district=CHILANZAR)
+    assert data.deal_type == "sale"
+    assert data.total == 4
+    assert data.avg_ppm_usd is not None
+
+
+def test_load_hub_rent_uses_monthly_avg(db_session):
+    from app.core.config import get_settings
+    from app.seo import service
+    _seed_rent(db_session)
+    data = service.load_hub(db_session, get_settings(), district=CHILANZAR, deal_type="rent")
+    assert data.deal_type == "rent"
+    assert data.price_period == "month"
+    assert data.total == 3
+    # средняя $/мес = (300+400+600)/3 = 433.3
+    assert 430 <= data.avg_price_usd <= 437
+
+
+def test_available_hubs_separates_deal_types(db_session):
+    from app.core.config import get_settings
+    from app.seo import service
+    _seed(db_session)
+    _seed_rent(db_session)
+    sale_d, _, _ = service.available_hubs(db_session, get_settings(), deal_type="sale")
+    rent_d, _, _ = service.available_hubs(db_session, get_settings(), deal_type="rent")
+    assert sale_d.get(CHILANZAR) == 4
+    assert rent_d.get(CHILANZAR) == 3  # аренда считается отдельно
 
 
 def test_sitemap(client, db_session):
