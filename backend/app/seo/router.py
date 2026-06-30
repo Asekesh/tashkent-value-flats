@@ -332,25 +332,48 @@ def _render_hub(request: Request, db: Session, settings, data: HubData) -> HTMLR
     return templates.TemplateResponse(request, "hub.html", context)
 
 
-@router.get("/kvartira", response_class=HTMLResponse, include_in_schema=False)
-def catalog(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+def _catalog(request: Request, db: Session, deal_type: str) -> HTMLResponse:
     settings = get_settings()
-    districts, rooms, _ = service.available_hubs(db, settings)
-    context = {
-        "page_title": "Квартиры в Ташкенте по районам — каталог | uyradar.uz",
-        "meta_description": (
+    districts, rooms, _ = service.available_hubs(db, settings, deal_type)
+    pre = PREFIX[deal_type]
+    if deal_type == "rent":
+        h1 = "Аренда квартир в Ташкенте по районам"
+        page_title = "Аренда квартир в Ташкенте по районам — каталог | uyradar.uz"
+        meta = (
+            "Каталог аренды квартир в Ташкенте по районам и комнатности: Чиланзар, Юнусабад, "
+            "Мирабад и другие. Объявления с OLX и Uybor с оценкой ниже рынка."
+        )
+    else:
+        h1 = "Квартиры в Ташкенте по районам"
+        page_title = "Квартиры в Ташкенте по районам — каталог | uyradar.uz"
+        meta = (
             "Каталог квартир в Ташкенте по районам и комнатности: Чиланзар, Юнусабад, "
             "Мирабад и другие. Объявления с OLX, Uybor и Realt24 с оценкой ниже рынка."
-        ),
+        )
+    context = {
+        "h1": h1,
+        "page_title": page_title,
+        "meta_description": meta,
         "canonical": _canonical(request),
-        "district_links": _district_links(districts, "/kvartira"),
-        "room_links": _room_links(rooms, "/kvartira"),
+        "district_links": _district_links(districts, pre),
+        "room_links": _room_links(rooms, pre),
         "jsonld": _breadcrumb_jsonld(
-            request, [{"name": "Главная", "url": "/"}, {"name": "Квартиры", "url": "/kvartira"}]
+            request, [{"name": "Главная", "url": "/"}, {"name": ROOT_LABEL[deal_type], "url": pre}]
         ),
+        "jsonld_extra": [],
         "og_image": f"{BASE_URL}/static/logo.png",
     }
     return templates.TemplateResponse(request, "catalog.html", context)
+
+
+@router.get("/kvartira", response_class=HTMLResponse, include_in_schema=False)
+def catalog(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    return _catalog(request, db, "sale")
+
+
+@router.get("/arenda", response_class=HTMLResponse, include_in_schema=False)
+def rent_catalog(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    return _catalog(request, db, "rent")
 
 
 def _slug_hub(slug: str, request: Request, db: Session, deal_type: str) -> HTMLResponse:

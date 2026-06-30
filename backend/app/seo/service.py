@@ -232,6 +232,18 @@ def build_sitemap_xml(db: Session, settings: Settings) -> str:
             _url_entry(f"/kvartira/{DISTRICT_SLUGS[dist]}/{rooms_slug(room)}", lastmod, "daily", "0.6")
         )
 
+    # Аренда: статический каталог + хабы.
+    rent_last = db.scalar(select(func.max(Listing.updated_at)).where(*base_conditions(settings, "rent")))
+    rent_mod = (rent_last or datetime.utcnow()).strftime("%Y-%m-%d")
+    entries.append(_url_entry("/arenda", rent_mod, "daily", "0.8"))
+    r_districts, r_rooms, r_combos = available_hubs(db, settings, "rent")
+    for dist in r_districts:
+        entries.append(_url_entry(f"/arenda/{DISTRICT_SLUGS[dist]}", rent_mod, "daily", "0.7"))
+    for room in r_rooms:
+        entries.append(_url_entry(f"/arenda/{rooms_slug(room)}", rent_mod, "daily", "0.6"))
+    for dist, room in r_combos:
+        entries.append(_url_entry(f"/arenda/{DISTRICT_SLUGS[dist]}/{rooms_slug(room)}", rent_mod, "daily", "0.6"))
+
     body = "\n".join(entries)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'

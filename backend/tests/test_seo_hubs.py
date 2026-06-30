@@ -234,6 +234,24 @@ def test_rooms_breakdown_rent_avg_monthly(db_session):
     assert by_rooms[3]["avg_price"] == 600.0
 
 
+def test_sitemap_includes_rent(client, db_session):
+    _seed(db_session)
+    _seed_rent(db_session)
+    r = client.get("/sitemap.xml")
+    assert r.status_code == 200
+    assert "https://uyradar.uz/kvartira/chilanzar</loc>" in r.text
+    assert "https://uyradar.uz/arenda/chilanzar</loc>" in r.text
+    assert "https://uyradar.uz/arenda</loc>" in r.text
+
+
+def test_arenda_catalog(client, db_session):
+    _seed_rent(db_session)
+    r = client.get("/arenda")
+    assert r.status_code == 200
+    assert "/arenda/chilanzar" in r.text
+    assert "аренд" in r.text.lower()
+
+
 def test_sitemap(client, db_session):
     _seed(db_session)
     r = client.get("/sitemap.xml")
