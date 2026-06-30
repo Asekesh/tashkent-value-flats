@@ -148,6 +148,22 @@ def test_available_hubs_separates_deal_types(db_session):
     assert rent_d.get(CHILANZAR) == 3  # аренда считается отдельно
 
 
+def test_cross_link_sale_to_rent(client, db_session):
+    _seed(db_session)       # продажа Чиланзар
+    _seed_rent(db_session)  # аренда Чиланзар
+    r = client.get("/kvartira/chilanzar")
+    assert r.status_code == 200
+    assert 'href="/arenda/chilanzar"' in r.text
+    assert "Снять" in r.text
+
+
+def test_cross_link_absent_when_no_counterpart(client, db_session):
+    _seed(db_session)       # только продажа
+    r = client.get("/kvartira/chilanzar")
+    assert r.status_code == 200
+    assert 'href="/arenda/chilanzar"' not in r.text
+
+
 def test_hub_v2_intro_and_faq_sale(client, db_session):
     _seed(db_session)
     r = client.get("/kvartira/chilanzar")

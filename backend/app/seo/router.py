@@ -283,6 +283,28 @@ def _breadcrumb_jsonld(request: Request, crumbs: list[dict]) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+def _cross_link(db: Session, settings, data: HubData) -> dict | None:
+    """Ссылка на зеркальный срез в другом deal_type, если он непустой."""
+    other = "rent" if data.deal_type == "sale" else "sale"
+    other_data = service.load_hub(
+        db, settings, district=data.district, rooms=data.rooms, deal_type=other
+    )
+    if other_data.total == 0:
+        return None
+    pre = PREFIX[other]
+    if data.district and data.rooms:
+        url = f"{pre}/{DISTRICT_SLUGS[data.district]}/{rooms_slug(data.rooms)}"
+    elif data.district:
+        url = f"{pre}/{DISTRICT_SLUGS[data.district]}"
+    elif data.rooms:
+        url = f"{pre}/{rooms_slug(data.rooms)}"
+    else:
+        url = pre
+    place = district_locative(data.district) if data.district else "Ташкенте"
+    label = f"Снять в {place}" if other == "rent" else f"Купить в {place}"
+    return {"url": url, "label": label, "count": other_data.total}
+
+
 def _render_hub(request: Request, db: Session, settings, data: HubData) -> HTMLResponse:
     h1, title, desc = _meta(data)
     crumbs = _breadcrumbs(data)
@@ -302,6 +324,7 @@ def _render_hub(request: Request, db: Session, settings, data: HubData) -> HTMLR
         "faq": faq,
         "breadcrumbs": crumbs,
         "related": _related(db, settings, data),
+        "cross_link": _cross_link(db, settings, data),
         "jsonld": _breadcrumb_jsonld(request, crumbs),
         "jsonld_extra": jsonld_extra,
         "og_image": f"{BASE_URL}/static/logo.png",

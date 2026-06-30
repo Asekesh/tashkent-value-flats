@@ -3,6 +3,10 @@
 <h1>{{ h1 }}</h1>
 <p class="lead">{{ intro }}</p>
 
+{% if cross_link %}
+<p class="cross"><a href="{{ cross_link.url }}">{{ cross_link.label }} →</a> <span>({{ cross_link.count|num }})</span></p>
+{% endif %}
+
 <div class="stats">
   {% for s in stats %}<div><b>{{ s.value }}</b><span>{{ s.label }}</span></div>{% endfor %}
 </div>
