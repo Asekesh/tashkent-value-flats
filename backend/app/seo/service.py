@@ -165,6 +165,28 @@ def available_hubs(
     return districts, rooms, combos
 
 
+def rooms_breakdown(
+    db: Session, settings: Settings, district: str, deal_type: str = "sale"
+) -> list[dict]:
+    """Средняя цена и кол-во по комнатности (1..5) в рамках района.
+
+    Для продажи avg_price — средняя полная цена, для аренды — средняя $/мес.
+    Используется на district-only хабе; на rooms-фиксированных не вызывается.
+    """
+    conds = base_conditions(settings, deal_type) + [Listing.district == district]
+    rows = db.execute(
+        select(Listing.rooms, func.count(), func.avg(Listing.price_usd))
+        .where(*conds)
+        .group_by(Listing.rooms)
+        .order_by(Listing.rooms.asc())
+    ).all()
+    return [
+        {"rooms": int(rm), "count": int(cnt), "avg_price": float(avg)}
+        for rm, cnt, avg in rows
+        if rm and 1 <= rm <= 5
+    ]
+
+
 # --- Sitemap -----------------------------------------------------------------
 
 _STATIC_URLS = [

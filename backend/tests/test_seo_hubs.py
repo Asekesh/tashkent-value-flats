@@ -148,6 +148,28 @@ def test_available_hubs_separates_deal_types(db_session):
     assert rent_d.get(CHILANZAR) == 3  # аренда считается отдельно
 
 
+def test_rooms_breakdown_sale_avg_full_price(db_session):
+    from app.core.config import get_settings
+    from app.seo import service
+    _seed(db_session)  # Чиланзар: 3×2-комн ($50k), 1×3-комн ($50k)
+    rows = service.rooms_breakdown(db_session, get_settings(), CHILANZAR, deal_type="sale")
+    by_rooms = {r["rooms"]: r for r in rows}
+    assert by_rooms[2]["count"] == 3
+    assert by_rooms[3]["count"] == 1
+    assert by_rooms[2]["avg_price"] == 50000.0
+
+
+def test_rooms_breakdown_rent_avg_monthly(db_session):
+    from app.core.config import get_settings
+    from app.seo import service
+    _seed_rent(db_session)  # 2×2-комн ($300,$400), 1×3-комн ($600)
+    rows = service.rooms_breakdown(db_session, get_settings(), CHILANZAR, deal_type="rent")
+    by_rooms = {r["rooms"]: r for r in rows}
+    assert by_rooms[2]["count"] == 2
+    assert by_rooms[2]["avg_price"] == 350.0
+    assert by_rooms[3]["avg_price"] == 600.0
+
+
 def test_sitemap(client, db_session):
     _seed(db_session)
     r = client.get("/sitemap.xml")
