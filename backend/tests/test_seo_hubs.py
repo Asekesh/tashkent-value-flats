@@ -148,6 +148,28 @@ def test_available_hubs_separates_deal_types(db_session):
     assert rent_d.get(CHILANZAR) == 3  # аренда считается отдельно
 
 
+def test_arenda_district_rooms_hub(client, db_session):
+    _seed_rent(db_session)
+    r = client.get("/arenda/chilanzar/2-komnatnye")
+    assert r.status_code == 200
+    assert "Аренда 2-комнатных квартир в Чиланзарском районе" in r.text
+    assert "/мес" in r.text
+    assert 'rel="canonical" href="https://uyradar.uz/arenda/chilanzar/2-komnatnye"' in r.text
+
+
+def test_arenda_district_hub(client, db_session):
+    _seed_rent(db_session)
+    r = client.get("/arenda/chilanzar")
+    assert r.status_code == 200
+    assert "Аренда квартир в Чиланзарском районе" in r.text
+    assert "/мес" in r.text
+
+
+def test_arenda_empty_404(client, db_session):
+    _seed(db_session)  # только продажа засеяна
+    assert client.get("/arenda/chilanzar").status_code == 404
+
+
 def test_rooms_breakdown_sale_avg_full_price(db_session):
     from app.core.config import get_settings
     from app.seo import service

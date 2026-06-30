@@ -37,60 +37,65 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["usd"] = fmt_usd
 templates.env.filters["num"] = fmt_num
 
+PREFIX = {"sale": "/kvartira", "rent": "/arenda"}
+ROOT_LABEL = {"sale": "Квартиры", "rent": "Аренда"}
+
 
 def _canonical(request: Request) -> str:
     return BASE_URL + request.url.path
 
 
 def _breadcrumbs(data: HubData) -> list[dict]:
-    crumbs = [{"name": "Главная", "url": "/"}, {"name": "Квартиры", "url": "/kvartira"}]
+    pre = PREFIX[data.deal_type]
+    crumbs = [{"name": "Главная", "url": "/"}, {"name": ROOT_LABEL[data.deal_type], "url": pre}]
     if data.district:
-        crumbs.append({"name": data.district, "url": f"/kvartira/{DISTRICT_SLUGS[data.district]}"})
+        crumbs.append({"name": data.district, "url": f"{pre}/{DISTRICT_SLUGS[data.district]}"})
         if data.rooms:
             crumbs.append(
                 {
                     "name": rooms_label(data.rooms),
-                    "url": f"/kvartira/{DISTRICT_SLUGS[data.district]}/{rooms_slug(data.rooms)}",
+                    "url": f"{pre}/{DISTRICT_SLUGS[data.district]}/{rooms_slug(data.rooms)}",
                 }
             )
     elif data.rooms:
-        crumbs.append({"name": rooms_label(data.rooms), "url": f"/kvartira/{rooms_slug(data.rooms)}"})
+        crumbs.append({"name": rooms_label(data.rooms), "url": f"{pre}/{rooms_slug(data.rooms)}"})
     return crumbs
 
 
 def _related(db: Session, settings, data: HubData) -> list[dict]:
     """Блоки перелинковки — только реально существующие срезы."""
-    districts, rooms, combos = service.available_hubs(db, settings)
+    districts, rooms, combos = service.available_hubs(db, settings, data.deal_type)
+    pre = PREFIX[data.deal_type]
     sections: list[dict] = []
 
     if data.district and not data.rooms:
         # район → его комнатность + другие районы
         links = [
-            {"label": f"{rooms_label(rm)} в этом районе", "url": f"/kvartira/{DISTRICT_SLUGS[data.district]}/{rooms_slug(rm)}"}
+            {"label": f"{rooms_label(rm)} в этом районе", "url": f"{pre}/{DISTRICT_SLUGS[data.district]}/{rooms_slug(rm)}"}
             for (dist, rm) in sorted(combos) if dist == data.district
         ]
         if links:
             sections.append({"title": "По комнатности", "links": links})
-        sections.append({"title": "Другие районы", "links": _district_links(districts, exclude=data.district)})
+        sections.append({"title": "Другие районы", "links": _district_links(districts, pre, exclude=data.district)})
     elif data.rooms and not data.district:
         # комнатность по городу → та же комнатность по районам + другая комнатность
         links = [
-            {"label": dist, "url": f"/kvartira/{DISTRICT_SLUGS[dist]}/{rooms_slug(data.rooms)}"}
+            {"label": dist, "url": f"{pre}/{DISTRICT_SLUGS[dist]}/{rooms_slug(data.rooms)}"}
             for (dist, rm) in sorted(combos) if rm == data.rooms
         ]
         if links:
             sections.append({"title": f"{rooms_label(data.rooms)} по районам", "links": links})
-        sections.append({"title": "Другая комнатность", "links": _room_links(rooms, exclude=data.rooms)})
+        sections.append({"title": "Другая комнатность", "links": _room_links(rooms, pre, exclude=data.rooms)})
     elif data.district and data.rooms:
         # район+комнатность → другая комнатность здесь + этот же тип в других районах
         other_rooms = [
-            {"label": rooms_label(rm), "url": f"/kvartira/{DISTRICT_SLUGS[data.district]}/{rooms_slug(rm)}"}
+            {"label": rooms_label(rm), "url": f"{pre}/{DISTRICT_SLUGS[data.district]}/{rooms_slug(rm)}"}
             for (dist, rm) in sorted(combos) if dist == data.district and rm != data.rooms
         ]
         if other_rooms:
             sections.append({"title": f"Другая комнатность в {district_locative(data.district)}", "links": other_rooms})
         other_dist = [
-            {"label": dist, "url": f"/kvartira/{DISTRICT_SLUGS[dist]}/{rooms_slug(data.rooms)}"}
+            {"label": dist, "url": f"{pre}/{DISTRICT_SLUGS[dist]}/{rooms_slug(data.rooms)}"}
             for (dist, rm) in sorted(combos) if rm == data.rooms and dist != data.district
         ]
         if other_dist:
@@ -98,22 +103,28 @@ def _related(db: Session, settings, data: HubData) -> list[dict]:
     return sections
 
 
-def _district_links(districts: dict[str, int], exclude: str | None = None) -> list[dict]:
+def _district_links(districts: dict[str, int], pre: str, exclude: str | None = None) -> list[dict]:
     return [
-        {"label": dist, "url": f"/kvartira/{DISTRICT_SLUGS[dist]}"}
+        {"label": dist, "url": f"{pre}/{DISTRICT_SLUGS[dist]}"}
         for dist in sorted(districts) if dist != exclude
     ]
 
 
-def _room_links(rooms: dict[int, int], exclude: int | None = None) -> list[dict]:
+def _room_links(rooms: dict[int, int], pre: str, exclude: int | None = None) -> list[dict]:
     return [
-        {"label": rooms_label(rm), "url": f"/kvartira/{rooms_slug(rm)}"}
+        {"label": rooms_label(rm), "url": f"{pre}/{rooms_slug(rm)}"}
         for rm in sorted(rooms) if rm != exclude
     ]
 
 
 def _meta(data: HubData) -> tuple[str, str, str]:
-    """(h1, title, meta_description) для трёх видов хаба."""
+    """(h1, title, meta_description) для трёх видов хаба, по типу сделки."""
+    if data.deal_type == "rent":
+        return _meta_rent(data)
+    return _meta_sale(data)
+
+
+def _meta_sale(data: HubData) -> tuple[str, str, str]:
     if data.district and data.rooms:
         place = district_locative(data.district)
         h1 = f"{rooms_label(data.rooms)} квартиры в {place}"
@@ -138,6 +149,34 @@ def _meta(data: HubData) -> tuple[str, str, str]:
             f"{data.total} объявлений: {rooms_label(data.rooms).lower()} квартиры в Ташкенте. "
             f"Цены от {fmt_usd(data.min_price_usd)}, в среднем {fmt_num(data.avg_ppm_usd)} $/м². "
             "OLX, Uybor и Realt24 с оценкой ниже рынка."
+        )
+    return h1, title, desc
+
+
+def _meta_rent(data: HubData) -> tuple[str, str, str]:
+    pm = f"{fmt_usd(data.min_price_usd)}/мес"
+    if data.district and data.rooms:
+        place = district_locative(data.district)
+        h1 = f"Аренда {data.rooms}-комнатных квартир в {place}"
+        title = f"{h1} — {data.total} объявлений от {pm} | uyradar.uz"
+        desc = (
+            f"{data.total} объявлений: снять {data.rooms}-комнатную квартиру в {place} Ташкента. "
+            f"Аренда от {pm}, в среднем {fmt_usd(data.avg_price_usd)}/мес. OLX и Uybor с оценкой ниже рынка."
+        )
+    elif data.district:
+        place = district_locative(data.district)
+        h1 = f"Аренда квартир в {place}"
+        title = f"{h1} — {data.total} объявлений от {pm} | uyradar.uz"
+        desc = (
+            f"{data.total} квартир в аренду в {place} Ташкента. Аренда от {pm}, "
+            f"в среднем {fmt_usd(data.avg_price_usd)}/мес. Объявления с OLX и Uybor с оценкой ниже рынка."
+        )
+    else:  # rooms-only
+        h1 = f"Аренда {data.rooms}-комнатных квартир в Ташкенте"
+        title = f"{h1} — {data.total} объявлений от {pm} | uyradar.uz"
+        desc = (
+            f"{data.total} объявлений: снять {data.rooms}-комнатную квартиру в Ташкенте. "
+            f"Аренда от {pm}, в среднем {fmt_usd(data.avg_price_usd)}/мес. OLX и Uybor с оценкой ниже рынка."
         )
     return h1, title, desc
 
@@ -184,8 +223,8 @@ def catalog(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
             "Мирабад и другие. Объявления с OLX, Uybor и Realt24 с оценкой ниже рынка."
         ),
         "canonical": _canonical(request),
-        "district_links": _district_links(districts),
-        "room_links": _room_links(rooms),
+        "district_links": _district_links(districts, "/kvartira"),
+        "room_links": _room_links(rooms, "/kvartira"),
         "jsonld": _breadcrumb_jsonld(
             request, [{"name": "Главная", "url": "/"}, {"name": "Квартиры", "url": "/kvartira"}]
         ),
@@ -194,35 +233,57 @@ def catalog(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     return templates.TemplateResponse(request, "catalog.html", context)
 
 
-@router.get("/kvartira/{slug}", response_class=HTMLResponse, include_in_schema=False)
-def hub_by_slug(slug: str, request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+def _slug_hub(slug: str, request: Request, db: Session, deal_type: str) -> HTMLResponse:
     settings = get_settings()
     rooms = rooms_from_slug(slug)
     if rooms is not None:
-        data = service.load_hub(db, settings, rooms=rooms)
+        data = service.load_hub(db, settings, rooms=rooms, deal_type=deal_type)
     else:
         district = district_from_slug(slug)
         if not district:
             raise HTTPException(status_code=404, detail="Страница не найдена")
-        data = service.load_hub(db, settings, district=district)
+        data = service.load_hub(db, settings, district=district, deal_type=deal_type)
     if data.total == 0:
         raise HTTPException(status_code=404, detail="Нет активных объявлений")
     return _render_hub(request, db, settings, data)
 
 
-@router.get("/kvartira/{dslug}/{rslug}", response_class=HTMLResponse, include_in_schema=False)
-def hub_district_rooms(
-    dslug: str, rslug: str, request: Request, db: Session = Depends(get_db)
+def _district_rooms_hub(
+    dslug: str, rslug: str, request: Request, db: Session, deal_type: str
 ) -> HTMLResponse:
     settings = get_settings()
     district = district_from_slug(dslug)
     rooms = rooms_from_slug(rslug)
     if not district or rooms is None:
         raise HTTPException(status_code=404, detail="Страница не найдена")
-    data = service.load_hub(db, settings, district=district, rooms=rooms)
+    data = service.load_hub(db, settings, district=district, rooms=rooms, deal_type=deal_type)
     if data.total == 0:
         raise HTTPException(status_code=404, detail="Нет активных объявлений")
     return _render_hub(request, db, settings, data)
+
+
+@router.get("/kvartira/{slug}", response_class=HTMLResponse, include_in_schema=False)
+def hub_by_slug(slug: str, request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    return _slug_hub(slug, request, db, "sale")
+
+
+@router.get("/kvartira/{dslug}/{rslug}", response_class=HTMLResponse, include_in_schema=False)
+def hub_district_rooms(
+    dslug: str, rslug: str, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    return _district_rooms_hub(dslug, rslug, request, db, "sale")
+
+
+@router.get("/arenda/{slug}", response_class=HTMLResponse, include_in_schema=False)
+def rent_hub_by_slug(slug: str, request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    return _slug_hub(slug, request, db, "rent")
+
+
+@router.get("/arenda/{dslug}/{rslug}", response_class=HTMLResponse, include_in_schema=False)
+def rent_hub_district_rooms(
+    dslug: str, rslug: str, request: Request, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    return _district_rooms_hub(dslug, rslug, request, db, "rent")
 
 
 @router.get("/sitemap.xml", include_in_schema=False)
