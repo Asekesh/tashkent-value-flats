@@ -1,20 +1,36 @@
 {% extends "hub_base.html" %}
 {% block content %}
 <h1>{{ h1 }}</h1>
-<p class="lead">{{ meta_description }}</p>
+<p class="lead">{{ intro }}</p>
 
 <div class="stats">
-  <div><b>{{ data.total|num }}</b><span>объявлений</span></div>
-  <div><b>{{ data.min_price_usd|usd }}</b><span>цена от</span></div>
-  <div><b>{{ data.avg_ppm_usd|num }} $/м²</b><span>в среднем</span></div>
+  {% for s in stats %}<div><b>{{ s.value }}</b><span>{{ s.label }}</span></div>{% endfor %}
 </div>
+
+{% if data.rooms_table %}
+<section class="rooms-table">
+  <h2>Цены по комнатности</h2>
+  <table>
+    <thead><tr><th>Комнат</th><th>Объявлений</th><th>Средняя цена</th></tr></thead>
+    <tbody>
+      {% for row in data.rooms_table %}
+      <tr>
+        <td>{{ row.rooms }}-комн.</td>
+        <td>{{ row.count|num }}</td>
+        <td>{{ row.avg_price|usd }}{% if data.deal_type == 'rent' %}/мес{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 
 <div class="cards">
   {% for c in data.cards %}
   <article class="card">
     {% if c.photo %}<img class="thumb" src="{{ c.photo }}" alt="{{ c.rooms }}-комн. квартира, {{ c.area_m2|num }} м², {{ c.district }}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />{% endif %}
     <div class="card-body">
-      <div class="price">{{ c.price_usd|usd }}{% if c.discount_percent %}<span class="disc">−{{ c.discount_percent|round|int }}% к рынку</span>{% endif %}</div>
+      <div class="price">{{ c.price_usd|usd }}{% if data.deal_type == 'rent' %}/мес{% endif %}{% if c.discount_percent %}<span class="disc">−{{ c.discount_percent|round|int }}% к рынку</span>{% endif %}</div>
       <div class="facts">{{ c.rooms }}-комн. · {{ c.area_m2|num }} м²{% if c.floor %} · {{ c.floor }}{% if c.total_floors %}/{{ c.total_floors }}{% endif %} эт.{% endif %} · {{ c.price_per_m2_usd|num }} $/м²</div>
       <div class="addr">{{ c.district }}{% if c.address %} · {{ c.address }}{% endif %}</div>
       <a class="src" href="{{ c.url }}" target="_blank" rel="nofollow noopener">Смотреть на {{ c.source_label }} →</a>
@@ -25,6 +41,15 @@
 
 {% if data.total > data.cards|length %}
 <p class="more">Показаны {{ data.cards|length }} лучших предложений из {{ data.total|num }}. <a href="/">Все объявления и фильтры — в поиске →</a></p>
+{% endif %}
+
+{% if faq %}
+<section class="faq">
+  <h2>Частые вопросы</h2>
+  {% for f in faq %}
+  <details><summary>{{ f.q }}</summary><p>{{ f.a }}</p></details>
+  {% endfor %}
+</section>
 {% endif %}
 
 {% if related %}

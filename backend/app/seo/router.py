@@ -181,6 +181,94 @@ def _meta_rent(data: HubData) -> tuple[str, str, str]:
     return h1, title, desc
 
 
+def _stats(data: HubData) -> list[dict]:
+    items = [{"value": fmt_num(data.total), "label": "объявлений"}]
+    if data.deal_type == "rent":
+        items.append({"value": f"{fmt_usd(data.min_price_usd)}/мес", "label": "аренда от"})
+        items.append({"value": f"{fmt_usd(data.avg_price_usd)}/мес", "label": "в среднем"})
+    else:
+        items.append({"value": fmt_usd(data.min_price_usd), "label": "цена от"})
+        items.append({"value": f"{fmt_num(data.avg_ppm_usd)} $/м²", "label": "в среднем"})
+    return items
+
+
+def _intro(data: HubData) -> str:
+    place = f"в {district_locative(data.district)}" if data.district else "в Ташкенте"
+    rlabel = f"{data.rooms}-комнатных " if data.rooms else ""
+    below = sum(1 for c in data.cards if c.get("discount_percent"))
+    below_txt = f" {below} предложений ниже рыночной оценки." if below else ""
+    if data.deal_type == "rent":
+        return (
+            f"Сейчас {data.total} {rlabel}квартир в аренду {place}. "
+            f"Аренда от {fmt_usd(data.min_price_usd)}/мес, в среднем {fmt_usd(data.avg_price_usd)}/мес."
+            f"{below_txt}"
+        )
+    return (
+        f"Сейчас {data.total} {rlabel}квартир в продаже {place}. "
+        f"Цены от {fmt_usd(data.min_price_usd)}, в среднем {fmt_num(data.avg_ppm_usd)} $/м²."
+        f"{below_txt}"
+    )
+
+
+def _faq(data: HubData) -> list[dict]:
+    place = district_locative(data.district) if data.district else "Ташкенте"
+    rlabel = f"{data.rooms}-комнатную квартиру" if data.rooms else "квартиру"
+    verb = "снять" if data.deal_type == "rent" else "купить"
+    if data.deal_type == "rent":
+        price_a = (
+            f"Аренда от {fmt_usd(data.min_price_usd)}/мес, "
+            f"в среднем {fmt_usd(data.avg_price_usd)}/мес по {data.total} объявлениям."
+        )
+    else:
+        price_a = (
+            f"Цены от {fmt_usd(data.min_price_usd)}, "
+            f"в среднем {fmt_num(data.avg_ppm_usd)} $/м² по {data.total} объявлениям."
+        )
+    return [
+        {"q": f"Сколько стоит {verb} {rlabel} в {place}?", "a": price_a},
+        {"q": "Сколько объявлений доступно?",
+         "a": f"В подборке {data.total} активных объявлений с OLX, Uybor и Realt24, обновляется ежедневно."},
+        {"q": "Как выбрать вариант ниже рынка?",
+         "a": "Объявления отсортированы по скидке к нашей оценке: лучшие сделки сверху, бейдж «−X% к рынку»."},
+    ]
+
+
+def _itemlist_jsonld(data: HubData) -> str | None:
+    if not data.cards:
+        return None
+    items = []
+    for i, c in enumerate(data.cards):
+        node = {"@type": "RealEstateListing", "name": c["title"], "url": c["url"]}
+        if c.get("price_usd"):
+            node["offers"] = {
+                "@type": "Offer",
+                "price": int(round(c["price_usd"])),
+                "priceCurrency": "USD",
+            }
+        items.append({"@type": "ListItem", "position": i + 1, "item": node})
+    return json.dumps(
+        {"@context": "https://schema.org", "@type": "ItemList", "itemListElement": items},
+        ensure_ascii=False,
+    )
+
+
+def _faq_jsonld(faq: list[dict]) -> str | None:
+    if not faq:
+        return None
+    return json.dumps(
+        {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+                {"@type": "Question", "name": f["q"],
+                 "acceptedAnswer": {"@type": "Answer", "text": f["a"]}}
+                for f in faq
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+
 def _breadcrumb_jsonld(request: Request, crumbs: list[dict]) -> str:
     items = [
         {
@@ -198,15 +286,24 @@ def _breadcrumb_jsonld(request: Request, crumbs: list[dict]) -> str:
 def _render_hub(request: Request, db: Session, settings, data: HubData) -> HTMLResponse:
     h1, title, desc = _meta(data)
     crumbs = _breadcrumbs(data)
+    # Таблица по комнатности — только на district-only хабе.
+    if data.district and not data.rooms:
+        data.rooms_table = service.rooms_breakdown(db, settings, data.district, data.deal_type)
+    faq = _faq(data)
+    jsonld_extra = [j for j in (_itemlist_jsonld(data), _faq_jsonld(faq)) if j]
     context = {
         "page_title": title,
         "meta_description": desc,
         "canonical": _canonical(request),
         "h1": h1,
         "data": data,
+        "stats": _stats(data),
+        "intro": _intro(data),
+        "faq": faq,
         "breadcrumbs": crumbs,
         "related": _related(db, settings, data),
         "jsonld": _breadcrumb_jsonld(request, crumbs),
+        "jsonld_extra": jsonld_extra,
         "og_image": f"{BASE_URL}/static/logo.png",
     }
     return templates.TemplateResponse(request, "hub.html", context)

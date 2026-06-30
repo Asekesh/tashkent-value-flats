@@ -18,6 +18,8 @@
     <meta property="og:image" content="{{ og_image }}" />
     <meta name="twitter:card" content="summary_large_image" />
     {% if jsonld %}<script type="application/ld+json">{{ jsonld|safe }}</script>{% endif %}
+    {% for j in jsonld_extra %}<script type="application/ld+json">{{ j|safe }}</script>
+    {% endfor %}
 
     <style>
       * { box-sizing: border-box; }
@@ -65,6 +67,21 @@
       .site-footer nav { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin-bottom: 10px; }
       .site-footer nav a { font-size: 13px; }
       .site-footer p { color: #94a3b8; font-size: 12px; margin: 0 auto; max-width: 620px; }
+      .rooms-table { margin: 0 0 28px; }
+      .rooms-table h2, .faq h2 { font-size: 18px; margin: 0 0 12px; }
+      .rooms-table table { border-collapse: collapse; width: 100%; max-width: 520px;
+                           background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+      .rooms-table th, .rooms-table td { text-align: left; padding: 10px 14px; font-size: 14px;
+                                         border-bottom: 1px solid #eef2f7; }
+      .rooms-table th { color: #64748b; font-weight: 600; background: #f8fafc; }
+      .rooms-table tr:last-child td { border-bottom: 0; }
+      .cross { margin: -10px 0 22px; font-size: 14px; }
+      .cross span { color: #94a3b8; }
+      .faq { margin: 32px 0 0; max-width: 760px; }
+      .faq details { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+                     padding: 12px 16px; margin-bottom: 10px; }
+      .faq summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+      .faq p { margin: 10px 0 0; color: #475569; font-size: 14px; }
       @media (max-width: 520px) { h1 { font-size: 22px; } .wrap { padding: 18px 16px 40px; } }
     </style>
   </head>

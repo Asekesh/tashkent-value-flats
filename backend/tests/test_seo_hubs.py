@@ -148,6 +148,32 @@ def test_available_hubs_separates_deal_types(db_session):
     assert rent_d.get(CHILANZAR) == 3  # аренда считается отдельно
 
 
+def test_hub_v2_intro_and_faq_sale(client, db_session):
+    _seed(db_session)
+    r = client.get("/kvartira/chilanzar")
+    assert r.status_code == 200
+    assert "Цены по комнатности" in r.text   # таблица на district-only
+    assert "FAQPage" in r.text                # FAQ JSON-LD
+    assert "ItemList" in r.text               # список объявлений JSON-LD
+    assert "Сколько стоит" in r.text          # видимый FAQ-вопрос
+
+
+def test_hub_v2_rent_stats_and_table(client, db_session):
+    _seed_rent(db_session)
+    r = client.get("/arenda/chilanzar")
+    assert r.status_code == 200
+    assert "Цены по комнатности" in r.text
+    assert "/мес" in r.text
+    assert "FAQPage" in r.text
+
+
+def test_hub_v2_combo_hides_rooms_table(client, db_session):
+    _seed(db_session)
+    r = client.get("/kvartira/chilanzar/2-komnatnye")
+    assert r.status_code == 200
+    assert "Цены по комнатности" not in r.text  # на комбо таблицы нет
+
+
 def test_arenda_district_rooms_hub(client, db_session):
     _seed_rent(db_session)
     r = client.get("/arenda/chilanzar/2-komnatnye")
