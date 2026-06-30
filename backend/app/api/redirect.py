@@ -48,5 +48,8 @@ def track_click(token: str, request: Request, db: Session = Depends(get_db)) -> 
         db.commit()
 
     listing = db.get(Listing, send.listing_id) if send.listing_id else None
-    target = listing.url if listing and listing.url else HOME
-    return RedirectResponse(target, status_code=302)
+    # Снятые объявления отдают 410 и кидают ошибку в приложении источника —
+    # лучше увести на главную, чем на мёртвую страницу.
+    if listing is None or not listing.url or listing.status == "removed":
+        return RedirectResponse(HOME, status_code=302)
+    return RedirectResponse(listing.url, status_code=302)
