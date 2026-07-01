@@ -13,8 +13,10 @@ from sqlalchemy import func, nulls_last, select
 from sqlalchemy.orm import Session
 from xml.sax.saxutils import escape
 
+from statistics import median
+
 from app.core.config import Settings
-from app.models import Listing
+from app.models import Listing, ResidentialComplex
 from app.seo.slugs import DISTRICT_SLUGS, rooms_slug
 from app.services.normalization import loads_json
 
@@ -165,6 +167,75 @@ def available_hubs(
     return districts, rooms, combos
 
 
+@dataclass
+class ComplexHub:
+    id: int
+    name: str
+    district: str | None
+    total: int
+    min_price_usd: float | None
+    median_price_usd: float | None
+    median_ppm_usd: float | None
+    cards: list[dict] = field(default_factory=list)
+    rooms_table: list[dict] = field(default_factory=list)
+    deal_type: str = "sale"
+
+
+def load_complex(
+    db: Session,
+    settings: Settings,
+    rc_id: int,
+    deal_type: str = "sale",
+    limit: int = HUB_LIST_LIMIT,
+) -> ComplexHub | None:
+    """Данные страницы ЖК: медианы по всем активным листингам ЖК + топ-N карточек.
+    None → ЖК нет в справочнике или 0 активных (роут отдаёт 404)."""
+    rc = db.get(ResidentialComplex, rc_id)
+    if rc is None:
+        return None
+    conds = base_conditions(settings, deal_type) + [Listing.residential_complex_id == rc_id]
+
+    priced = db.execute(
+        select(Listing.price_usd, Listing.price_per_m2_usd, Listing.rooms).where(*conds)
+    ).all()
+    if not priced:
+        return None
+
+    prices = [p for p, _, _ in priced]
+    ppms = [m for _, m, _ in priced]
+    rooms_groups: dict[int, list[float]] = {}
+    for price, _, rm in priced:
+        if rm and 1 <= rm <= 5:
+            rooms_groups.setdefault(int(rm), []).append(price)
+    rooms_table = [
+        {"rooms": rm, "count": len(vals), "avg_price": round(float(median(vals)), 2)}
+        for rm, vals in sorted(rooms_groups.items())
+    ]
+
+    rows = db.scalars(
+        select(Listing)
+        .where(*conds)
+        .order_by(
+            nulls_last(Listing.discount_percent.desc()),
+            Listing.price_per_m2_usd.asc(),
+            Listing.id.asc(),
+        )
+        .limit(limit)
+    ).all()
+    return ComplexHub(
+        id=rc.id,
+        name=rc.name,
+        district=rc.district,
+        total=len(priced),
+        min_price_usd=round(float(min(prices)), 2),
+        median_price_usd=round(float(median(prices)), 2),
+        median_ppm_usd=round(float(median(ppms)), 2),
+        cards=[listing_card(r) for r in rows],
+        rooms_table=rooms_table,
+        deal_type=deal_type,
+    )
+
+
 def rooms_breakdown(
     db: Session, settings: Settings, district: str, deal_type: str = "sale"
 ) -> list[dict]:
@@ -243,6 +314,14 @@ def build_sitemap_xml(db: Session, settings: Settings) -> str:
         entries.append(_url_entry(f"/arenda/{rooms_slug(room)}", rent_mod, "daily", "0.6"))
     for dist, room in r_combos:
         entries.append(_url_entry(f"/arenda/{DISTRICT_SLUGS[dist]}/{rooms_slug(room)}", rent_mod, "daily", "0.6"))
+
+    # ЖК: каталог + страницы комплексов с >= COMPLEX_MIN_LISTINGS (продажа).
+    from app.seo.slugs import complex_slug
+    from app.services.complex_stats import list_complex_stats
+
+    entries.append(_url_entry("/jk", lastmod, "daily", "0.7"))
+    for s in list_complex_stats(db, settings, deal_type="sale"):
+        entries.append(_url_entry(f"/jk/{complex_slug(s.id, s.name)}", lastmod, "weekly", "0.6"))
 
     body = "\n".join(entries)
     return (

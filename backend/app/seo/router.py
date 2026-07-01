@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -22,15 +23,18 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.seo import service
-from app.seo.service import BASE_URL, HubData, fmt_num, fmt_usd
+from app.seo.service import BASE_URL, ComplexHub, HubData, fmt_num, fmt_usd
 from app.seo.slugs import (
     DISTRICT_SLUGS,
+    complex_id_from_slug,
+    complex_slug,
     district_from_slug,
     district_locative,
     rooms_from_slug,
     rooms_label,
     rooms_slug,
 )
+from app.services.complex_stats import list_complex_stats
 
 router = APIRouter(tags=["seo"])
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -427,6 +431,129 @@ def rent_hub_district_rooms(
     dslug: str, rslug: str, request: Request, db: Session = Depends(get_db)
 ) -> HTMLResponse:
     return _district_rooms_hub(dslug, rslug, request, db, "rent")
+
+
+# --- ЖК-страницы /jk ---------------------------------------------------------
+
+def _jk_clean(name: str) -> str:
+    """Имя ЖК без ведущего «ЖК» — чтобы не было «ЖК «ЖК Нова»» после обёртки."""
+    return re.sub(r"^\s*жк\s+", "", name, flags=re.IGNORECASE).strip() or name
+
+
+def _complex_stats(ch: ComplexHub) -> list[dict]:
+    return [
+        {"value": fmt_num(ch.total), "label": "объявлений"},
+        {"value": fmt_usd(ch.min_price_usd), "label": "цена от"},
+        {"value": fmt_usd(ch.median_price_usd), "label": "медиана"},
+        {"value": f"{fmt_num(ch.median_ppm_usd)} $/м²", "label": "медиана $/м²"},
+    ]
+
+
+def _complex_intro(ch: ComplexHub) -> str:
+    place = f" в {district_locative(ch.district)}" if ch.district else ""
+    below = sum(1 for c in ch.cards if c.get("discount_percent"))
+    below_txt = f" {below} предложений ниже медианы комплекса." if below else ""
+    return (
+        f"В ЖК «{_jk_clean(ch.name)}»{place} сейчас {ch.total} квартир в продаже. "
+        f"Цены от {fmt_usd(ch.min_price_usd)}, медиана {fmt_usd(ch.median_price_usd)} "
+        f"({fmt_num(ch.median_ppm_usd)} $/м²).{below_txt}"
+    )
+
+
+def _complex_faq(ch: ComplexHub) -> list[dict]:
+    return [
+        {"q": f"Сколько стоит квартира в ЖК «{_jk_clean(ch.name)}»?",
+         "a": f"Цены от {fmt_usd(ch.min_price_usd)}, медиана {fmt_usd(ch.median_price_usd)} "
+              f"({fmt_num(ch.median_ppm_usd)} $/м²) по {ch.total} объявлениям."},
+        {"q": "Сколько объявлений в этом ЖК?",
+         "a": f"Сейчас {ch.total} активных объявлений с OLX, Uybor и Realt24, обновляется ежедневно."},
+        {"q": "Как найти вариант ниже рынка?",
+         "a": "Объявления отсортированы по скидке к оценке: самые выгодные сверху, бейдж «−X% к рынку»."},
+    ]
+
+
+def _complex_meta(ch: ComplexHub) -> tuple[str, str, str]:
+    place = f" в {district_locative(ch.district)}" if ch.district else " в Ташкенте"
+    name = _jk_clean(ch.name)
+    h1 = f"ЖК «{name}» — квартиры и цены"
+    title = f"ЖК {name}{place} — {ch.total} объявлений от {fmt_usd(ch.min_price_usd)} | uyradar.uz"
+    desc = (
+        f"Квартиры в ЖК «{name}»{place}: {ch.total} объявлений, цены от "
+        f"{fmt_usd(ch.min_price_usd)}, медиана {fmt_usd(ch.median_price_usd)} "
+        f"({fmt_num(ch.median_ppm_usd)} $/м²). OLX, Uybor и Realt24 с оценкой ниже рынка."
+    )
+    return h1, title, desc
+
+
+def _complex_breadcrumbs(ch: ComplexHub) -> list[dict]:
+    return [
+        {"name": "Главная", "url": "/"},
+        {"name": "Жилые комплексы", "url": "/jk"},
+        {"name": ch.name, "url": f"/jk/{complex_slug(ch.id, ch.name)}"},
+    ]
+
+
+@router.get("/jk", response_class=HTMLResponse, include_in_schema=False)
+def complex_catalog(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    settings = get_settings()
+    stats = list_complex_stats(db, settings, deal_type="sale")
+    complexes = [
+        {
+            "name": s.name,
+            "district": s.district,
+            "count": s.count,
+            "min_price_usd": s.min_price_usd,
+            "median_price_usd": s.median_price_usd,
+            "url": f"/jk/{complex_slug(s.id, s.name)}",
+        }
+        for s in stats
+    ]
+    context = {
+        "h1": "Жилые комплексы Ташкента — цены",
+        "page_title": "Жилые комплексы Ташкента — цены на квартиры | uyradar.uz",
+        "meta_description": (
+            "Каталог жилых комплексов Ташкента: медианные цены, количество объявлений, "
+            "квартиры ниже рынка. Данные с OLX, Uybor и Realt24."
+        ),
+        "canonical": _canonical(request),
+        "complexes": complexes,
+        "jsonld": _breadcrumb_jsonld(
+            request, [{"name": "Главная", "url": "/"}, {"name": "Жилые комплексы", "url": "/jk"}]
+        ),
+        "jsonld_extra": [],
+        "og_image": f"{BASE_URL}/static/logo.png",
+    }
+    return templates.TemplateResponse(request, "complex_catalog.html", context)
+
+
+@router.get("/jk/{slug}", response_class=HTMLResponse, include_in_schema=False)
+def complex_page(slug: str, request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    rc_id = complex_id_from_slug(slug)
+    if rc_id is None:
+        raise HTTPException(status_code=404, detail="Страница не найдена")
+    settings = get_settings()
+    ch = service.load_complex(db, settings, rc_id, deal_type="sale")
+    if ch is None:
+        raise HTTPException(status_code=404, detail="ЖК не найден или нет активных объявлений")
+    h1, title, desc = _complex_meta(ch)
+    crumbs = _complex_breadcrumbs(ch)
+    faq = _complex_faq(ch)
+    jsonld_extra = [j for j in (_itemlist_jsonld(ch), _faq_jsonld(faq)) if j]
+    context = {
+        "page_title": title,
+        "meta_description": desc,
+        "canonical": _canonical(request),
+        "h1": h1,
+        "data": ch,
+        "stats": _complex_stats(ch),
+        "intro": _complex_intro(ch),
+        "faq": faq,
+        "breadcrumbs": crumbs,
+        "jsonld": _breadcrumb_jsonld(request, crumbs),
+        "jsonld_extra": jsonld_extra,
+        "og_image": f"{BASE_URL}/static/logo.png",
+    }
+    return templates.TemplateResponse(request, "complex.html", context)
 
 
 @router.get("/sitemap.xml", include_in_schema=False)
