@@ -315,6 +315,14 @@ def build_sitemap_xml(db: Session, settings: Settings) -> str:
     for dist, room in r_combos:
         entries.append(_url_entry(f"/arenda/{DISTRICT_SLUGS[dist]}/{rooms_slug(room)}", rent_mod, "daily", "0.6"))
 
+    # ЖК: каталог + страницы комплексов с >= COMPLEX_MIN_LISTINGS (продажа).
+    from app.seo.slugs import complex_slug
+    from app.services.complex_stats import list_complex_stats
+
+    entries.append(_url_entry("/jk", lastmod, "daily", "0.7"))
+    for s in list_complex_stats(db, settings, deal_type="sale"):
+        entries.append(_url_entry(f"/jk/{complex_slug(s.id, s.name)}", lastmod, "weekly", "0.6"))
+
     body = "\n".join(entries)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
