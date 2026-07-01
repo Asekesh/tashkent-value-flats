@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -434,6 +435,11 @@ def rent_hub_district_rooms(
 
 # --- ЖК-страницы /jk ---------------------------------------------------------
 
+def _jk_clean(name: str) -> str:
+    """Имя ЖК без ведущего «ЖК» — чтобы не было «ЖК «ЖК Нова»» после обёртки."""
+    return re.sub(r"^\s*жк\s+", "", name, flags=re.IGNORECASE).strip() or name
+
+
 def _complex_stats(ch: ComplexHub) -> list[dict]:
     return [
         {"value": fmt_num(ch.total), "label": "объявлений"},
@@ -448,7 +454,7 @@ def _complex_intro(ch: ComplexHub) -> str:
     below = sum(1 for c in ch.cards if c.get("discount_percent"))
     below_txt = f" {below} предложений ниже медианы комплекса." if below else ""
     return (
-        f"В ЖК «{ch.name}»{place} сейчас {ch.total} квартир в продаже. "
+        f"В ЖК «{_jk_clean(ch.name)}»{place} сейчас {ch.total} квартир в продаже. "
         f"Цены от {fmt_usd(ch.min_price_usd)}, медиана {fmt_usd(ch.median_price_usd)} "
         f"({fmt_num(ch.median_ppm_usd)} $/м²).{below_txt}"
     )
@@ -456,7 +462,7 @@ def _complex_intro(ch: ComplexHub) -> str:
 
 def _complex_faq(ch: ComplexHub) -> list[dict]:
     return [
-        {"q": f"Сколько стоит квартира в ЖК «{ch.name}»?",
+        {"q": f"Сколько стоит квартира в ЖК «{_jk_clean(ch.name)}»?",
          "a": f"Цены от {fmt_usd(ch.min_price_usd)}, медиана {fmt_usd(ch.median_price_usd)} "
               f"({fmt_num(ch.median_ppm_usd)} $/м²) по {ch.total} объявлениям."},
         {"q": "Сколько объявлений в этом ЖК?",
@@ -468,10 +474,11 @@ def _complex_faq(ch: ComplexHub) -> list[dict]:
 
 def _complex_meta(ch: ComplexHub) -> tuple[str, str, str]:
     place = f" в {district_locative(ch.district)}" if ch.district else " в Ташкенте"
-    h1 = f"ЖК «{ch.name}» — квартиры и цены"
-    title = f"ЖК {ch.name}{place} — {ch.total} объявлений от {fmt_usd(ch.min_price_usd)} | uyradar.uz"
+    name = _jk_clean(ch.name)
+    h1 = f"ЖК «{name}» — квартиры и цены"
+    title = f"ЖК {name}{place} — {ch.total} объявлений от {fmt_usd(ch.min_price_usd)} | uyradar.uz"
     desc = (
-        f"Квартиры в ЖК «{ch.name}»{place}: {ch.total} объявлений, цены от "
+        f"Квартиры в ЖК «{name}»{place}: {ch.total} объявлений, цены от "
         f"{fmt_usd(ch.min_price_usd)}, медиана {fmt_usd(ch.median_price_usd)} "
         f"({fmt_num(ch.median_ppm_usd)} $/м²). OLX, Uybor и Realt24 с оценкой ниже рынка."
     )
