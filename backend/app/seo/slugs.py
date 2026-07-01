@@ -57,3 +57,32 @@ def rooms_from_slug(slug: str) -> int | None:
 
 def rooms_label(rooms: int) -> str:
     return f"{rooms}-комнатные"
+
+
+# --- ЖК-слаги: /jk/{id}-{translit(name)} -------------------------------------
+_COMPLEX_ID_RE = re.compile(r"^(\d+)(?:-.*)?$")
+
+# Русская кириллица → латиница (без внешних зависимостей). Латиница/цифры в
+# именах ЖК проходят как есть, кириллица транслитерируется.
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "c", "ч": "ch", "ш": "sh", "щ": "sch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+}
+
+
+def _translit(text: str) -> str:
+    return "".join(_TRANSLIT.get(ch, ch) for ch in text.lower())
+
+
+def complex_slug(rc_id: int, name: str) -> str:
+    """`/jk/{id}-{транслит-имени}`. Резолвим по id, имя в URL — для SEO."""
+    base = re.sub(r"[^a-z0-9]+", "-", _translit(name)).strip("-")
+    return f"{rc_id}-{base}" if base else str(rc_id)
+
+
+def complex_id_from_slug(slug: str) -> int | None:
+    match = _COMPLEX_ID_RE.match(slug)
+    return int(match.group(1)) if match else None

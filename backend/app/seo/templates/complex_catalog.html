@@ -1,0 +1,15 @@
+{% extends "hub_base.html" %}
+{% block content %}
+<h1>{{ h1 }}</h1>
+<p class="lead">{{ meta_description }}</p>
+
+<section class="jk-list">
+  {% for c in complexes %}
+  <a class="jk-card" href="{{ c.url }}">
+    <b>{{ c.name }}</b>
+    <span class="jk-meta">{% if c.district %}{{ c.district }} · {% endif %}{{ c.count|num }} объявл.</span>
+    <span class="jk-price">от {{ c.min_price_usd|usd }} · медиана {{ c.median_price_usd|usd }}</span>
+  </a>
+  {% endfor %}
+</section>
+{% endblock %}
