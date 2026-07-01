@@ -40,13 +40,13 @@ def fmt_num(value: float | None) -> str:
     return f"{int(round(value)):,}".replace(",", " ")
 
 
-def base_conditions(settings: Settings) -> list:
-    # SEO-лендинги — только продажа. Аренда получит свои хабы/sitemap отдельно.
+def base_conditions(settings: Settings, deal_type: str = "sale") -> list:
+    min_price, min_ppm = settings.price_floors(deal_type)
     return [
         Listing.status == "active",
-        Listing.deal_type == "sale",
-        Listing.price_usd >= settings.min_listing_price_usd,
-        Listing.price_per_m2_usd >= settings.min_listing_price_per_m2_usd,
+        Listing.deal_type == deal_type,
+        Listing.price_usd >= min_price,
+        Listing.price_per_m2_usd >= min_ppm,
     ]
 
 
@@ -79,6 +79,10 @@ class HubData:
     min_price_usd: float | None
     avg_ppm_usd: float | None
     cards: list[dict] = field(default_factory=list)
+    deal_type: str = "sale"
+    price_period: str | None = None
+    avg_price_usd: float | None = None  # средняя $/мес для аренды
+    rooms_table: list[dict] = field(default_factory=list)  # заполняется в _render_hub
 
 
 def load_hub(
@@ -87,20 +91,27 @@ def load_hub(
     *,
     district: str | None = None,
     rooms: int | None = None,
+    deal_type: str = "sale",
     limit: int = HUB_LIST_LIMIT,
 ) -> HubData:
-    conds = base_conditions(settings)
+    conds = base_conditions(settings, deal_type)
     if district:
         conds.append(Listing.district == district)
     if rooms:
         conds.append(Listing.rooms == rooms)
 
     total = db.scalar(select(func.count()).select_from(Listing).where(*conds)) or 0
+    period = "month" if deal_type == "rent" else None
     if total == 0:
-        return HubData(district, rooms, 0, None, None, [])
+        return HubData(district, rooms, 0, None, None, [], deal_type, period, None)
 
     min_price = db.scalar(select(func.min(Listing.price_usd)).where(*conds))
     avg_ppm = db.scalar(select(func.avg(Listing.price_per_m2_usd)).where(*conds))
+    avg_price = (
+        db.scalar(select(func.avg(Listing.price_usd)).where(*conds))
+        if deal_type == "rent"
+        else None
+    )
     # Лучшие сделки сверху: дисконт к рынку убыванием, затем дешевле по $/м².
     rows = db.scalars(
         select(Listing)
@@ -112,18 +123,21 @@ def load_hub(
         )
         .limit(limit)
     ).all()
-    return HubData(district, rooms, int(total), min_price, avg_ppm, [listing_card(r) for r in rows])
+    return HubData(
+        district, rooms, int(total), min_price, avg_ppm,
+        [listing_card(r) for r in rows], deal_type, period, avg_price,
+    )
 
 
 def available_hubs(
-    db: Session, settings: Settings
+    db: Session, settings: Settings, deal_type: str = "sale"
 ) -> tuple[dict[str, int], dict[int, int], dict[tuple[str, int], int]]:
     """Срезы с >= MIN_HUB_LISTINGS активных — для каталога и sitemap.
 
     Возвращает (районы, комнатность, район×комнатность) → счётчик. Только
     районы из карты slug'ов (без «Не указан») и комнатность 1..6.
     """
-    conds = base_conditions(settings)
+    conds = base_conditions(settings, deal_type)
 
     districts: dict[str, int] = {}
     for dist, cnt in db.execute(
@@ -149,6 +163,28 @@ def available_hubs(
             combos[(dist, int(room))] = int(cnt)
 
     return districts, rooms, combos
+
+
+def rooms_breakdown(
+    db: Session, settings: Settings, district: str, deal_type: str = "sale"
+) -> list[dict]:
+    """Средняя цена и кол-во по комнатности (1..5) в рамках района.
+
+    Для продажи avg_price — средняя полная цена, для аренды — средняя $/мес.
+    Используется на district-only хабе; на rooms-фиксированных не вызывается.
+    """
+    conds = base_conditions(settings, deal_type) + [Listing.district == district]
+    rows = db.execute(
+        select(Listing.rooms, func.count(), func.avg(Listing.price_usd))
+        .where(*conds)
+        .group_by(Listing.rooms)
+        .order_by(Listing.rooms.asc())
+    ).all()
+    return [
+        {"rooms": int(rm), "count": int(cnt), "avg_price": float(avg)}
+        for rm, cnt, avg in rows
+        if rm and 1 <= rm <= 5
+    ]
 
 
 # --- Sitemap -----------------------------------------------------------------
@@ -195,6 +231,18 @@ def build_sitemap_xml(db: Session, settings: Settings) -> str:
         entries.append(
             _url_entry(f"/kvartira/{DISTRICT_SLUGS[dist]}/{rooms_slug(room)}", lastmod, "daily", "0.6")
         )
+
+    # Аренда: статический каталог + хабы.
+    rent_last = db.scalar(select(func.max(Listing.updated_at)).where(*base_conditions(settings, "rent")))
+    rent_mod = (rent_last or datetime.utcnow()).strftime("%Y-%m-%d")
+    entries.append(_url_entry("/arenda", rent_mod, "daily", "0.8"))
+    r_districts, r_rooms, r_combos = available_hubs(db, settings, "rent")
+    for dist in r_districts:
+        entries.append(_url_entry(f"/arenda/{DISTRICT_SLUGS[dist]}", rent_mod, "daily", "0.7"))
+    for room in r_rooms:
+        entries.append(_url_entry(f"/arenda/{rooms_slug(room)}", rent_mod, "daily", "0.6"))
+    for dist, room in r_combos:
+        entries.append(_url_entry(f"/arenda/{DISTRICT_SLUGS[dist]}/{rooms_slug(room)}", rent_mod, "daily", "0.6"))
 
     body = "\n".join(entries)
     return (
